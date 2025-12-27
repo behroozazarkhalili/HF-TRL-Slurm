@@ -1,0 +1,22 @@
+# Reasoning Benchmark Suite
+# Tests mathematical and logical reasoning capabilities
+
+tasks:
+  - gsm8k
+  - minerva_math
+  - arc_challenge
+  - arc_easy
+
+# Default settings
+batch_size: auto
+num_fewshot: null  # Use task defaults
+device: cuda
+apply_chat_template: true
+
+# Description
+description: |
+  Reasoning benchmarks evaluate mathematical and logical reasoning:
+  - GSM8K: Grade school math word problems
+  - MATH: Competition-level mathematics
+  - ARC-Challenge: Advanced reasoning challenges
+  - ARC-Easy: Basic reasoning questions

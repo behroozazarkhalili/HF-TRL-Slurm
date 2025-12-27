@@ -1,0 +1,38 @@
+# Core ML Libraries
+torch>=2.0.0
+transformers>=4.40.0
+datasets>=2.18.0
+accelerate>=0.27.0
+peft>=0.10.0
+trl>=0.8.0
+
+# Quantization
+bitsandbytes>=0.43.0
+
+# Experiment Tracking
+trackio>=0.10.0
+
+# Evaluation
+lm-eval>=0.4.0
+evaluate>=0.4.0
+
+# GGUF Conversion (optional)
+# llama-cpp-python>=0.2.0
+
+# Optional: Unsloth for faster training
+# unsloth>=2024.4
+
+# Utilities
+python-dotenv>=1.0.0
+rich>=13.0.0
+typer>=0.9.0
+pyyaml>=6.0.0
+
+# HuggingFace Hub
+huggingface-hub>=0.20.0
+
+# Progress bars
+tqdm>=4.66.0
+
+# Jupyter support (optional)
+ipywidgets>=8.0.0

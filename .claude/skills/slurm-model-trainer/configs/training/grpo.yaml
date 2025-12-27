@@ -1,0 +1,42 @@
+# GRPO (Group Relative Policy Optimization) Configuration
+# For reinforcement learning with reward functions
+
+name: GRPO
+script: train_grpo.py
+description: Group Relative Policy Optimization for math reasoning
+requires_instruct: true  # Typically uses instruct models
+
+# Common training settings
+common:
+  bf16: true
+  gradient_checkpointing: true
+  lora_dropout: 0.05  # Higher dropout for GRPO
+  num_train_epochs: 1
+  save_steps: 500
+  logging_steps: 10
+  save_total_limit: 3
+  hub_strategy: end
+  report_to: trackio
+
+# GRPO-specific settings
+grpo:
+  num_generations: 4  # Number of completions per prompt
+  reward_types:
+    - combined  # Accuracy + Format (recommended for math)
+    - accuracy  # Only check answer correctness
+    - format    # Only check response format
+    - length    # Penalize overly long responses
+
+# Recommended datasets for GRPO (math reasoning)
+recommended_datasets:
+  - id: nvidia/OpenMathInstruct-2
+    split: train
+    streaming: true
+    max_samples: 500000
+    description: Large math instruction dataset (14M samples)
+  - id: open-r1/OpenR1-Math-220k
+    split: train
+    description: Math reasoning dataset based on OpenR1
+  - id: HuggingFaceH4/MATH-500
+    split: test
+    description: Math benchmark dataset (evaluation)

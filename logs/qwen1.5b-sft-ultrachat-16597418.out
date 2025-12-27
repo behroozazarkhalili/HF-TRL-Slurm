@@ -1,0 +1,24 @@
+==========================================
+Job: qwen1.5b-sft-ultrachat (ID: 16597418)
+Node: fc11003
+Start time: Wed Dec 24 09:19:24 AM PST 2025
+==========================================
+
+Configuration:
+  Model: Qwen/Qwen2.5-1.5B
+  Dataset: HuggingFaceH4/ultrachat_200k
+  Hub Model ID: ermiaazarkhalili/Qwen2.5-1.5B-SFT-UltraChat
+  Batch Size: 4
+  Gradient Accumulation: 4
+  Effective Batch Size: 16
+  LoRA Rank: 64
+  Output Dir: /scratch/ermia/outputs/qwen1.5b-sft-16597418
+
+==========================================
+Phase 1: SFT Training
+==========================================
+============================================================
+SFT Training with TRL
+============================================================
+Trackio logging to: local directory /scratch/ermia/outputs/qwen1.5b-sft-16597418/trackio
+ERROR: Training failed with exit code 1

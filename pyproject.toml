@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hf-trl"
+version = "0.1.0"
+description = "Comprehensive Fine-tuning Toolkit for LLMs using TRL"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Ermia Azarkhalili", email = "ermiaazarkhalili@gmail.com"}
+]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+keywords = ["fine-tuning", "llm", "trl", "transformers", "machine-learning"]
+
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.40.0",
+    "datasets>=2.18.0",
+    "accelerate>=0.27.0",
+    "peft>=0.10.0",
+    "trl>=0.8.0",
+    "bitsandbytes>=0.43.0",
+    "python-dotenv>=1.0.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+    "pyyaml>=6.0.0",
+    "huggingface-hub>=0.20.0",
+    "tqdm>=4.66.0",
+]
+
+[project.optional-dependencies]
+tracking = ["trackio>=0.10.0"]
+evaluation = ["lm-eval>=0.4.0", "evaluate>=0.4.0"]
+notebook = ["ipywidgets>=8.0.0"]
+all = [
+    "trackio>=0.10.0",
+    "lm-eval>=0.4.0",
+    "evaluate>=0.4.0",
+    "ipywidgets>=8.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ermiaazarkhalili/HF-TRL"
+Repository = "https://github.com/ermiaazarkhalili/HF-TRL"
+Documentation = "https://github.com/ermiaazarkhalili/HF-TRL#readme"
+
+[project.scripts]
+hf-trl = "src.finetune.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml", "*.json", "*.md"]

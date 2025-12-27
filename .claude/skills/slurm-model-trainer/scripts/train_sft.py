@@ -1,0 +1,483 @@
+#!/usr/bin/env python3
+"""
+TRL SFT (Supervised Fine-Tuning) Training Script
+================================================
+Production-ready SFT training with:
+- LoRA/PEFT for efficient fine-tuning
+- Trackio monitoring
+- Train/eval splits for validation
+- Hub push for model persistence
+- Checkpoint saving
+
+Usage:
+    python train_sft.py \
+        --model_name_or_path Qwen/Qwen2.5-0.5B \
+        --dataset_name trl-lib/Capybara \
+        --output_dir ./output \
+        --push_to_hub \
+        --hub_model_id username/my-model
+"""
+
+import os
+import argparse
+from typing import Optional
+
+import torch
+from datasets import load_dataset
+from peft import LoraConfig, TaskType
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from trl import SFTConfig, SFTTrainer
+
+# Try to import trackio
+try:
+    import trackio
+    TRACKIO_AVAILABLE = True
+except ImportError:
+    TRACKIO_AVAILABLE = False
+    print("Warning: trackio not available, using default logging")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="SFT Training with TRL")
+
+    # Model arguments
+    parser.add_argument("--model_name_or_path", type=str, required=True,
+                        help="Path to pretrained model or model identifier from huggingface.co/models")
+    parser.add_argument("--use_4bit", action="store_true",
+                        help="Use 4-bit quantization")
+    parser.add_argument("--use_8bit", action="store_true",
+                        help="Use 8-bit quantization")
+
+    # Dataset arguments
+    parser.add_argument("--dataset_name", type=str, required=True,
+                        help="The name of the dataset to use")
+    parser.add_argument("--dataset_config", type=str, default=None,
+                        help="Dataset configuration name")
+    parser.add_argument("--dataset_split", type=str, default="train",
+                        help="Dataset split to use")
+    parser.add_argument("--max_samples", type=int, default=None,
+                        help="Maximum number of samples to use")
+    parser.add_argument("--test_size", type=float, default=0.1,
+                        help="Fraction of data to use for evaluation")
+
+    # LoRA arguments
+    parser.add_argument("--lora_r", type=int, default=16,
+                        help="LoRA attention dimension")
+    parser.add_argument("--lora_alpha", type=int, default=32,
+                        help="LoRA alpha parameter")
+    parser.add_argument("--lora_dropout", type=float, default=0.05,
+                        help="LoRA dropout")
+    parser.add_argument("--target_modules", type=str, nargs="+",
+                        default=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+                        help="Target modules for LoRA")
+
+    # Training arguments
+    parser.add_argument("--output_dir", type=str, required=True,
+                        help="Output directory for model and logs")
+    parser.add_argument("--num_train_epochs", type=int, default=3,
+                        help="Number of training epochs")
+    parser.add_argument("--max_steps", type=int, default=-1,
+                        help="Maximum number of training steps (-1 for full epochs)")
+    parser.add_argument("--per_device_train_batch_size", type=int, default=4,
+                        help="Training batch size per device")
+    parser.add_argument("--per_device_eval_batch_size", type=int, default=4,
+                        help="Evaluation batch size per device")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=4,
+                        help="Gradient accumulation steps")
+    parser.add_argument("--learning_rate", type=float, default=2e-5,
+                        help="Learning rate")
+    parser.add_argument("--weight_decay", type=float, default=0.01,
+                        help="Weight decay")
+    parser.add_argument("--warmup_ratio", type=float, default=0.1,
+                        help="Warmup ratio")
+    parser.add_argument("--max_length", type=int, default=2048,
+                        help="Maximum sequence length")
+    parser.add_argument("--dataset_num_proc", type=int, default=None,
+                        help="Number of processes for dataset preprocessing. "
+                             "Auto-detects from SLURM_CPUS_PER_TASK if not set.")
+
+    # Evaluation arguments
+    parser.add_argument("--eval_strategy", type=str, default="steps",
+                        choices=["no", "steps", "epoch"],
+                        help="Evaluation strategy")
+    parser.add_argument("--eval_steps", type=int, default=100,
+                        help="Evaluation frequency in steps")
+
+    # Saving arguments
+    parser.add_argument("--save_strategy", type=str, default="steps",
+                        choices=["no", "steps", "epoch"],
+                        help="Checkpoint save strategy")
+    parser.add_argument("--save_steps", type=int, default=100,
+                        help="Save frequency in steps")
+    parser.add_argument("--save_total_limit", type=int, default=3,
+                        help="Maximum number of checkpoints to keep")
+
+    # Hub arguments
+    parser.add_argument("--push_to_hub", action="store_true",
+                        help="Push model to Hugging Face Hub")
+    parser.add_argument("--hub_model_id", type=str, default=None,
+                        help="Hub model ID (e.g., username/model-name)")
+    parser.add_argument("--hub_strategy", type=str, default="end",
+                        choices=["end", "every_save", "checkpoint", "all_checkpoints"],
+                        help="Hub push strategy (end=push best model only)")
+
+    # Logging arguments
+    parser.add_argument("--logging_steps", type=int, default=10,
+                        help="Logging frequency in steps")
+    parser.add_argument("--report_to", type=str, default="trackio",
+                        help="Reporting integration (trackio, wandb, tensorboard, none)")
+    parser.add_argument("--run_name", type=str, default=None,
+                        help="Run name for tracking")
+    parser.add_argument("--project", type=str, default="sft-training",
+                        help="Project name for tracking")
+    parser.add_argument("--trackio_space_id", type=str, default=None,
+                        help="HF Space ID for trackio (e.g., 'username/space'). If not set, logs locally.")
+    parser.add_argument("--trackio_dir", type=str, default=None,
+                        help="Local directory for trackio logs. If set, overrides trackio_space_id.")
+
+    # Resume training
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None,
+                        help="Path to checkpoint directory to resume training from")
+
+    # Performance arguments
+    parser.add_argument("--bf16", action="store_true",
+                        help="Use bfloat16 precision")
+    parser.add_argument("--fp16", action="store_true",
+                        help="Use float16 precision")
+    parser.add_argument("--gradient_checkpointing", action="store_true",
+                        help="Enable gradient checkpointing")
+    parser.add_argument("--optim", type=str, default="adamw_torch",
+                        help="Optimizer to use")
+
+    return parser.parse_args()
+
+
+def load_model_and_tokenizer(args):
+    """Load model and tokenizer with optional quantization."""
+    print(f"Loading model: {args.model_name_or_path}")
+
+    # Quantization config
+    quantization_config = None
+    if args.use_4bit:
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        )
+    elif args.use_8bit:
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+
+    # Load model
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_name_or_path,
+        quantization_config=quantization_config,
+        torch_dtype=torch.bfloat16 if args.bf16 else torch.float16 if args.fp16 else torch.float32,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.model_name_or_path,
+        trust_remote_code=True,
+    )
+
+    # Set padding token if not set
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        model.config.pad_token_id = tokenizer.eos_token_id
+
+    print(f"Model loaded successfully")
+    print(f"Model dtype: {model.dtype}")
+    print(f"Model device: {model.device}")
+
+    return model, tokenizer
+
+
+def detect_dataset_format(dataset):
+    """
+    Detect dataset format for SFT training.
+
+    Returns: (format_type, columns_to_keep)
+    - 'conversational': Dataset has 'messages' column (chat format)
+    - 'prompt_completion': Dataset has 'prompt' and 'completion' columns
+    - 'text': Dataset has 'text' column (pre-formatted)
+    - 'unknown': Unknown format
+    """
+    columns = dataset.column_names
+
+    # Check for conversational format (messages/conversations)
+    if 'messages' in columns:
+        return 'conversational', ['messages']
+    if 'conversations' in columns:
+        return 'conversational', ['conversations']
+
+    # Check for prompt/completion format
+    if 'prompt' in columns and 'completion' in columns:
+        return 'prompt_completion', ['prompt', 'completion']
+
+    # Check for text format
+    if 'text' in columns:
+        return 'text', ['text']
+
+    # Check for instruction/output format (common in many datasets)
+    if 'instruction' in columns and 'output' in columns:
+        return 'instruction_output', ['instruction', 'input', 'output'] if 'input' in columns else ['instruction', 'output']
+
+    return 'unknown', columns
+
+
+def prepare_dataset_for_sft(dataset, format_type, columns_to_keep):
+    """
+    Prepare dataset for SFT training based on detected format.
+
+    For conversational datasets:
+    - Keep only the messages column to avoid confusing TRL
+    - TRL will automatically apply the tokenizer's chat_template
+
+    For instruction/output datasets:
+    - Convert to prompt/completion format
+    """
+    if format_type == 'conversational':
+        # Remove all columns except messages to avoid confusing TRL
+        columns_to_remove = [c for c in dataset.column_names if c not in columns_to_keep]
+        if columns_to_remove:
+            dataset = dataset.remove_columns(columns_to_remove)
+
+        print(f"  Prepared conversational dataset with columns: {dataset.column_names}")
+        return dataset
+
+    elif format_type == 'instruction_output':
+        # Convert instruction/output to prompt/completion format
+        def convert_to_prompt_completion(example):
+            instruction = example.get('instruction', '')
+            input_text = example.get('input', '')
+            output = example.get('output', '')
+
+            if input_text:
+                prompt = f"{instruction}\n\n{input_text}"
+            else:
+                prompt = instruction
+
+            return {'prompt': prompt, 'completion': output}
+
+        dataset = dataset.map(convert_to_prompt_completion, remove_columns=dataset.column_names)
+        print(f"  Converted instruction/output to prompt/completion format")
+        return dataset
+
+    elif format_type in ['prompt_completion', 'text']:
+        # Keep only relevant columns
+        columns_to_remove = [c for c in dataset.column_names if c not in columns_to_keep]
+        if columns_to_remove:
+            dataset = dataset.remove_columns(columns_to_remove)
+        print(f"  Using {format_type} format with columns: {dataset.column_names}")
+        return dataset
+
+    else:
+        print(f"  Warning: Unknown dataset format. Columns: {dataset.column_names}")
+        print(f"  TRL will attempt to auto-detect the format.")
+        return dataset
+
+
+def load_and_prepare_dataset(args):
+    """Load dataset and create train/eval splits with intelligent format detection."""
+    print(f"Loading dataset: {args.dataset_name}")
+
+    dataset = load_dataset(
+        args.dataset_name,
+        args.dataset_config,
+        split=args.dataset_split,
+    )
+
+    # Detect dataset format
+    format_type, columns_to_keep = detect_dataset_format(dataset)
+    print(f"  Detected format: {format_type}")
+    print(f"  Original columns: {dataset.column_names}")
+
+    # Prepare dataset for SFT
+    dataset = prepare_dataset_for_sft(dataset, format_type, columns_to_keep)
+
+    # Limit samples if specified
+    if args.max_samples is not None:
+        dataset = dataset.select(range(min(args.max_samples, len(dataset))))
+
+    # Create train/eval split
+    if args.test_size > 0 and args.eval_strategy != "no":
+        dataset_split = dataset.train_test_split(test_size=args.test_size, seed=42)
+        train_dataset = dataset_split["train"]
+        eval_dataset = dataset_split["test"]
+        print(f"Train samples: {len(train_dataset)}, Eval samples: {len(eval_dataset)}")
+    else:
+        train_dataset = dataset
+        eval_dataset = None
+        print(f"Train samples: {len(train_dataset)}, Eval: disabled")
+
+    return train_dataset, eval_dataset
+
+
+def create_peft_config(args) -> LoraConfig:
+    """Create LoRA configuration."""
+    return LoraConfig(
+        r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        target_modules=args.target_modules,
+        task_type=TaskType.CAUSAL_LM,
+        bias="none",
+    )
+
+
+def main():
+    args = parse_args()
+
+    print("=" * 60)
+    print("SFT Training with TRL")
+    print("=" * 60)
+
+    # Initialize tracking (logs locally by default, set space_id for HF Space)
+    if args.report_to == "trackio" and TRACKIO_AVAILABLE:
+        run_name = args.run_name or f"sft-{args.model_name_or_path.split('/')[-1]}"
+        trackio_kwargs = {
+            "project": args.project,
+            "name": run_name,
+            "config": {
+                "model": args.model_name_or_path,
+                "dataset": args.dataset_name,
+                "learning_rate": args.learning_rate,
+                "num_epochs": args.num_train_epochs,
+                "batch_size": args.per_device_train_batch_size,
+                "lora_r": args.lora_r,
+            }
+        }
+        # Use space_id if explicitly set, otherwise log locally (trackio default)
+        if hasattr(args, 'trackio_space_id') and args.trackio_space_id:
+            trackio_kwargs["space_id"] = args.trackio_space_id
+            print(f"Trackio logging to: HF Space {args.trackio_space_id}")
+        else:
+            print(f"Trackio logging locally (default)")
+        trackio.init(**trackio_kwargs)
+
+    # Load model and tokenizer
+    model, tokenizer = load_model_and_tokenizer(args)
+
+    # Load dataset
+    train_dataset, eval_dataset = load_and_prepare_dataset(args)
+
+    # Create LoRA config
+    peft_config = create_peft_config(args)
+    print(f"LoRA config: r={args.lora_r}, alpha={args.lora_alpha}")
+
+    # Dataset preprocessing config
+    num_proc = args.dataset_num_proc if args.dataset_num_proc else int(os.environ.get("SLURM_CPUS_PER_TASK", 4))
+    print(f"Dataset preprocessing: using {num_proc} processes")
+
+    # Training arguments
+    training_args = SFTConfig(
+        output_dir=args.output_dir,
+
+        # Training hyperparameters
+        num_train_epochs=args.num_train_epochs,
+        max_steps=args.max_steps,
+        per_device_train_batch_size=args.per_device_train_batch_size,
+        per_device_eval_batch_size=args.per_device_eval_batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        learning_rate=args.learning_rate,
+        weight_decay=args.weight_decay,
+        warmup_ratio=args.warmup_ratio,
+        lr_scheduler_type="cosine",
+        optim=args.optim,
+
+        # Sequence length
+        max_length=args.max_length,
+
+        # Precision
+        bf16=args.bf16,
+        fp16=args.fp16,
+
+        # Gradient checkpointing
+        gradient_checkpointing=args.gradient_checkpointing,
+        gradient_checkpointing_kwargs={"use_reentrant": False} if args.gradient_checkpointing else None,
+
+        # Evaluation
+        eval_strategy=args.eval_strategy if eval_dataset is not None else "no",
+        eval_steps=args.eval_steps if eval_dataset is not None else None,
+
+        # Saving
+        save_strategy=args.save_strategy,
+        save_steps=args.save_steps,
+        save_total_limit=args.save_total_limit,
+        load_best_model_at_end=True if eval_dataset is not None else False,
+
+        # Logging
+        logging_steps=args.logging_steps,
+        logging_first_step=True,
+        # Don't pass trackio to Trainer - we handle it manually with local logging
+        report_to=[] if args.report_to in ["none", "trackio"] else [args.report_to],
+        run_name=args.run_name,
+
+        # Hub
+        push_to_hub=args.push_to_hub,
+        hub_model_id=args.hub_model_id,
+        hub_strategy=args.hub_strategy,
+
+        # Other
+        remove_unused_columns=False,
+        dataloader_pin_memory=True,
+        dataloader_num_workers=4,
+
+        # Dataset preprocessing parallelization
+        dataset_num_proc=num_proc,
+    )
+
+    # Create trainer
+    trainer = SFTTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        processing_class=tokenizer,  # TRL 0.26+ uses processing_class instead of tokenizer
+        peft_config=peft_config,
+    )
+
+    # Train
+    print("\nStarting training...")
+    if args.resume_from_checkpoint:
+        print(f"Resuming from checkpoint: {args.resume_from_checkpoint}")
+    train_result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
+
+    # Save final model
+    print("\nSaving final model...")
+    trainer.save_model()
+
+    # Push to Hub
+    if args.push_to_hub:
+        print(f"\nPushing to Hub: {args.hub_model_id}")
+        trainer.push_to_hub()
+
+    # Log metrics
+    metrics = train_result.metrics
+    trainer.log_metrics("train", metrics)
+    trainer.save_metrics("train", metrics)
+
+    # Final evaluation
+    if eval_dataset is not None:
+        print("\nRunning final evaluation...")
+        eval_metrics = trainer.evaluate()
+        trainer.log_metrics("eval", eval_metrics)
+        trainer.save_metrics("eval", eval_metrics)
+
+    # Finish tracking
+    if args.report_to == "trackio" and TRACKIO_AVAILABLE:
+        trackio.finish()
+
+    print("\n" + "=" * 60)
+    print("Training Complete!")
+    print("=" * 60)
+    print(f"Model saved to: {args.output_dir}")
+    if args.push_to_hub:
+        print(f"Model pushed to: https://huggingface.co/{args.hub_model_id}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,44 @@
+/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+2025-12-24 08:05:38.788056: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2025-12-24 08:05:38.801334: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1766592338.814373  108304 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1766592338.818407  108304 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+W0000 00:00:1766592338.830879  108304 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1766592338.830915  108304 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1766592338.830926  108304 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1766592338.830936  108304 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+2025-12-24 08:05:38.834820: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Tokenizing train dataset:   0%|          | 0/197471 [00:00<?, ? examples/s]Tokenizing train dataset:   0%|          | 0/197471 [00:00<?, ? examples/s]
+Traceback (most recent call last):
+  File "/project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_sft.py", line 369, in <module>
+    main()
+  File "/project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_sft.py", line 322, in main
+    trainer = SFTTrainer(
+              ^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/trl/trainer/sft_trainer.py", line 831, in __init__
+    train_dataset = self._prepare_dataset(
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/trl/trainer/sft_trainer.py", line 1071, in _prepare_dataset
+    dataset = dataset.map(
+              ^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_dataset.py", line 562, in wrapper
+    out: Union["Dataset", "DatasetDict"] = func(self, *args, **kwargs)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_dataset.py", line 3341, in map
+    for rank, done, content in Dataset._map_single(**unprocessed_kwargs):
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_dataset.py", line 3673, in _map_single
+    for i, example in iter_outputs(shard_iterable):
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_dataset.py", line 3647, in iter_outputs
+    yield i, apply_function(example, i, offset=offset)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_dataset.py", line 3570, in apply_function
+    processed_inputs = function(*fn_args, *additional_args, **fn_kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/trl/trainer/sft_trainer.py", line 986, in tokenize_fn
+    completion = example["completion"]
+                 ~~~~~~~^^^^^^^^^^^^^^
+KeyError: 'completion'

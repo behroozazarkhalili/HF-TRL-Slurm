@@ -1,0 +1,22 @@
+# General Knowledge Benchmark Suite
+# Tests broad knowledge and common sense reasoning
+
+tasks:
+  - mmlu
+  - hellaswag
+  - truthfulqa_mc2
+  - winogrande
+
+# Default settings
+batch_size: auto
+num_fewshot: null
+device: cuda
+apply_chat_template: true
+
+# Description
+description: |
+  General benchmarks evaluate broad knowledge and understanding:
+  - MMLU: Massive Multitask Language Understanding (57 subjects)
+  - HellaSwag: Commonsense completion
+  - TruthfulQA: Truthfulness and factuality
+  - Winogrande: Pronoun resolution / common sense

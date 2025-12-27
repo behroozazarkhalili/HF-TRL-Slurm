@@ -1,0 +1,20 @@
+==========================================
+Job: qwen1.5b-sft-ultrachat (ID: 16576709)
+Node: fc11001
+Start time: Wed Dec 24 07:51:44 AM PST 2025
+==========================================
+
+Configuration:
+  Model: Qwen/Qwen2.5-1.5B
+  Dataset: HuggingFaceH4/ultrachat_200k
+  Hub Model ID: ermiaazarkhalili/Qwen2.5-1.5B-SFT-UltraChat
+  Batch Size: 4
+  Gradient Accumulation: 4
+  Effective Batch Size: 16
+  LoRA Rank: 64
+  Output Dir: /scratch/ermia/outputs/qwen1.5b-sft-16576709
+
+==========================================
+Phase 1: SFT Training
+==========================================
+ERROR: Training failed with exit code 2

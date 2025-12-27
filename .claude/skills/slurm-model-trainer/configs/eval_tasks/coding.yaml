@@ -1,0 +1,26 @@
+# Coding Benchmark Suite
+# Tests code generation and understanding capabilities
+
+tasks:
+  - humaneval
+  - mbpp
+
+# Default settings
+batch_size: auto
+num_fewshot: 0  # Zero-shot for code generation
+device: cuda
+apply_chat_template: true
+
+# Generation settings
+generation_kwargs:
+  max_new_tokens: 512
+  temperature: 0.0
+  do_sample: false
+
+# Description
+description: |
+  Coding benchmarks evaluate code generation abilities:
+  - HumanEval: Function completion from docstrings
+  - MBPP: Mostly Basic Python Problems
+
+  Note: These are pass@1 evaluations with greedy decoding.

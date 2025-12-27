@@ -1,0 +1,34 @@
+# DPO (Direct Preference Optimization) Configuration
+
+name: DPO
+script: train_dpo.py
+description: Direct Preference Optimization for alignment
+
+# Common training settings
+common:
+  bf16: true
+  gradient_checkpointing: true
+  lora_dropout: 0.0
+  num_train_epochs: 1
+  save_steps: 500
+  logging_steps: 10
+  save_total_limit: 3
+  hub_strategy: end
+  report_to: trackio
+
+# DPO-specific settings
+dpo:
+  beta: 0.1  # KL penalty coefficient
+  loss_type: sigmoid  # sigmoid, hinge, ipo
+
+# Recommended datasets for DPO
+recommended_datasets:
+  - id: argilla/capybara-dpo-7k-binarized
+    split: train
+    description: Chat preference dataset
+  - id: HuggingFaceH4/ultrafeedback_binarized
+    split: train_prefs
+    description: Preference dataset for alignment
+  - id: Anthropic/hh-rlhf
+    split: train
+    description: Human preference dataset

@@ -1,0 +1,31 @@
+# SFT (Supervised Fine-Tuning) Configuration
+# Common settings shared across all model sizes
+
+name: SFT
+script: train_sft.py
+description: Supervised Fine-Tuning for instruction-following
+
+# Common training settings
+common:
+  bf16: true
+  gradient_checkpointing: true
+  lora_dropout: 0.0
+  num_train_epochs: 1
+  save_steps: 500
+  logging_steps: 10
+  save_total_limit: 3
+  hub_strategy: end
+  report_to: trackio
+  dataset_num_proc: null  # Auto-detect from SLURM_CPUS_PER_TASK (default: 4)
+
+# Recommended datasets for SFT
+recommended_datasets:
+  - id: HuggingFaceH4/ultrachat_200k
+    split: train_sft
+    description: High-quality chat dataset
+  - id: argilla/capybara-dpo-7k-binarized
+    split: train
+    description: Chat dataset with diverse topics
+  - id: mlabonne/FineTome-100k
+    split: train
+    description: Curated fine-tuning dataset

@@ -1,0 +1,34 @@
+==============================================================
+Job started on Tue Dec 23 09:55:08 PM PST 2025
+Running on host fc10913
+Working directory: /project/6014832/ermia/HF-TRL
+Job ID: 16449914
+==============================================================
+HuggingFace token loaded from .env
+
+GPU Information:
+name, memory.total [MiB], memory.free [MiB]
+NVIDIA H100 80GB HBM3, 81559 MiB, 80974 MiB
+
+============================================
+Model: Qwen/Qwen2.5-7B-Instruct
+Dataset: trl-lib/Capybara
+Output: /scratch/ermia/outputs/qwen7b-sft-16449914
+Hub Model: ermiaazarkhalili/qwen2.5-7b-instruct-sft
+LoRA r=64, alpha=128
+4-bit quantization: Enabled
+============================================
+
+========== PHASE 1: SFT Training ==========
+
+Warning: trackio not available, using default logging
+============================================================
+SFT Training with TRL
+============================================================
+Loading model: Qwen/Qwen2.5-7B-Instruct
+Model loaded successfully
+Model dtype: torch.bfloat16
+Model device: cuda:0
+Loading dataset: trl-lib/Capybara
+Train samples: 14225, Eval samples: 1581
+LoRA config: r=64, alpha=128

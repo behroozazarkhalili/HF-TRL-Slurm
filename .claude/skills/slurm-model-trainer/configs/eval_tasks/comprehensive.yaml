@@ -1,0 +1,40 @@
+# Comprehensive Benchmark Suite
+# Full evaluation across all categories
+
+tasks:
+  # Reasoning
+  - gsm8k
+  - arc_challenge
+  - arc_easy
+
+  # General Knowledge
+  - mmlu
+  - hellaswag
+  - truthfulqa_mc2
+  - winogrande
+
+  # Coding
+  - humaneval
+  - mbpp
+
+# Default settings
+batch_size: auto
+num_fewshot: null
+device: cuda
+apply_chat_template: true
+
+# Description
+description: |
+  Comprehensive evaluation across all benchmark categories:
+
+  Reasoning (3 tasks):
+  - GSM8K, ARC-Challenge, ARC-Easy
+
+  General Knowledge (4 tasks):
+  - MMLU, HellaSwag, TruthfulQA, Winogrande
+
+  Coding (2 tasks):
+  - HumanEval, MBPP
+
+  Total: 9 benchmarks
+  Estimated time: 2-4 hours (depending on model size)

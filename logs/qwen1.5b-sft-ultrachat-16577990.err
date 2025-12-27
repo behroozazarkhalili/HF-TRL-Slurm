@@ -1,0 +1,56 @@
+/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+2025-12-24 07:58:44.884912: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2025-12-24 07:58:44.898277: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1766591924.911577  104432 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1766591924.915608  104432 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+W0000 00:00:1766591924.928153  104432 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1766591924.928194  104432 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1766591924.928205  104432 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1766591924.928216  104432 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+2025-12-24 07:58:44.932123: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Traceback (most recent call last):
+  File "/project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_sft.py", line 369, in <module>
+    main()
+  File "/project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_sft.py", line 261, in main
+    train_dataset, eval_dataset = load_and_prepare_dataset(args)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_sft.py", line 193, in load_and_prepare_dataset
+    dataset = load_dataset(
+              ^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/load.py", line 1524, in load_dataset
+    ds = builder_instance.as_dataset(split=split, verification_mode=verification_mode, in_memory=keep_in_memory)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/builder.py", line 1052, in as_dataset
+    datasets = map_nested(
+               ^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/utils/py_utils.py", line 493, in map_nested
+    mapped = function(data_struct)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/builder.py", line 1082, in _build_single_dataset
+    ds = self._as_dataset(
+         ^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/builder.py", line 1156, in _as_dataset
+    dataset_kwargs = ArrowReader(cache_dir, self.info).read(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_reader.py", line 248, in read
+    files = self.get_file_instructions(name, instructions, split_infos)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_reader.py", line 221, in get_file_instructions
+    file_instructions = make_file_instructions(
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_reader.py", line 130, in make_file_instructions
+    absolute_instructions = instruction.to_absolute(name2len)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_reader.py", line 620, in to_absolute
+    return [_rel_to_abs_instr(rel_instr, name2len) for rel_instr in self._relative_instructions]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_reader.py", line 620, in <listcomp>
+    return [_rel_to_abs_instr(rel_instr, name2len) for rel_instr in self._relative_instructions]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_env/lib/python3.11/site-packages/datasets/arrow_reader.py", line 437, in _rel_to_abs_instr
+    raise ValueError(f'Unknown split "{split}". Should be one of {list(name2len)}.')
+ValueError: Unknown split "train". Should be one of ['train_sft', 'test_sft', 'train_gen', 'test_gen'].
