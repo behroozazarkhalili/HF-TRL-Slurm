@@ -25,13 +25,14 @@ HUB_MODEL_ID="ermiaazarkhalili/Qwen2.5-14B-SFT-UltraChat"
 GGUF_REPO_ID="ermiaazarkhalili/Qwen2.5-14B-SFT-UltraChat-GGUF"
 
 # Training parameters (Large model config - 4-bit QLoRA, optimized for 40GB MIG)
+# Reduced LoRA rank and grad_accum to prevent OOM
 BATCH_SIZE=1
-GRAD_ACCUM=16
+GRAD_ACCUM=4
 LEARNING_RATE=2e-4
 NUM_EPOCHS=1
 MAX_SEQ_LENGTH=2048
-LORA_R=64
-LORA_ALPHA=128
+LORA_R=32
+LORA_ALPHA=64
 
 # =============================================================================
 # Environment Setup
