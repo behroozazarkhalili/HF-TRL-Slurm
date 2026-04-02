@@ -256,7 +256,7 @@ class GRPOTrainerScript(BaseTrainerScript):
             if (i + 1) % 10000 == 0:
                 print(f"  Processed {i + 1} samples...")
 
-        print(f"Stored {len(self._get_ground_truth_count())} ground truth answers")
+        print(f"Stored {self._get_ground_truth_count()} ground truth answers")
 
         return Dataset.from_list(samples)
 
@@ -277,6 +277,8 @@ class GRPOTrainerScript(BaseTrainerScript):
             dataset = self._process_openmath_dataset(dataset)
         elif "open-r1/openr1-math" in dataset_name or "openr1" in dataset_name:
             dataset = self._process_openr1_dataset(dataset)
+        elif "numinamath" in dataset_name or "numina" in dataset_name:
+            dataset = self._process_numina_dataset(dataset)
         else:
             dataset = self._process_generic_dataset(dataset)
 
@@ -317,14 +319,29 @@ class GRPOTrainerScript(BaseTrainerScript):
                 self._add_ground_truth(prompt, answer)
             return {"prompt": prompt} if prompt else None
 
+        elif "numinamath" in dataset_name or "numina" in dataset_name:
+            # NuminaMath-CoT: answer is in \boxed{} inside 'solution' field
+            prompt = example.get("problem", "")
+            solution = example.get("solution", "")
+            if prompt and solution:
+                answer = self._extract_boxed_answer(solution)
+                if answer:
+                    self._add_ground_truth(prompt, answer)
+            return {"prompt": prompt} if prompt else None
+
         else:
-            # Generic handling
+            # Generic handling — try to extract answer from 'solution' if present
             prompt = (
                 example.get("prompt") or
                 example.get("problem") or
                 example.get("question") or
                 ""
             )
+            solution = example.get("solution", "")
+            if prompt and solution:
+                answer = self._extract_boxed_answer(solution)
+                if answer:
+                    self._add_ground_truth(prompt, answer)
             return {"prompt": prompt} if prompt else None
 
     def _process_openmath_dataset(self, dataset) -> Dataset:
@@ -377,6 +394,36 @@ class GRPOTrainerScript(BaseTrainerScript):
 
         return dataset
 
+    def _process_numina_dataset(self, dataset) -> Dataset:
+        """Process AI-MO/NuminaMath-CoT dataset.
+
+        Answers are embedded as \\boxed{} in the 'solution' field.
+        """
+        print("Detected NuminaMath-CoT dataset format")
+
+        # Extract ground truth from \boxed{} in solution field
+        if "solution" in dataset.column_names:
+            for example in dataset:
+                problem = example.get("problem", "")
+                solution = example.get("solution", "")
+                if problem and solution:
+                    answer = self._extract_boxed_answer(solution)
+                    if answer:
+                        self._add_ground_truth(problem, answer)
+            print(f"Stored {self._get_ground_truth_count()} ground truth answers")
+
+        # Rename and clean columns
+        if "problem" in dataset.column_names and "prompt" not in dataset.column_names:
+            dataset = dataset.rename_column("problem", "prompt")
+
+        columns_to_remove = [
+            col for col in dataset.column_names if col != "prompt"
+        ]
+        if columns_to_remove:
+            dataset = dataset.remove_columns(columns_to_remove)
+
+        return dataset
+
     def _process_generic_dataset(self, dataset) -> Dataset:
         """Process generic dataset format."""
         if "prompt" not in dataset.column_names:
@@ -396,6 +443,14 @@ class GRPOTrainerScript(BaseTrainerScript):
             dataset = dataset.remove_columns(columns_to_remove)
 
         return dataset
+
+    @staticmethod
+    def _extract_boxed_answer(text: str) -> Optional[str]:
+        """Extract answer from \\boxed{} in a solution string."""
+        if not text:
+            return None
+        match = re.search(r'\\boxed\{([^}]+)\}', text)
+        return match.group(1).strip() if match else None
 
     def _add_ground_truth(self, prompt: str, answer: str) -> None:
         """Add ground truth to the reward function."""

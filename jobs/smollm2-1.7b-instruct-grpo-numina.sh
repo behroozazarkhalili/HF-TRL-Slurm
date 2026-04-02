@@ -34,8 +34,8 @@ GGUF_REPO_ID="ermiaazarkhalili/SmolLM2-1.7B-Instruct-GRPO-NuminaMath-${SAMPLE_SI
 
 # GRPO Training parameters - larger LoRA for 1.7B model
 # Increased batch size from 1→2 to reduce steps (40GB MIG can handle it)
-BATCH_SIZE=2
-GRAD_ACCUM=4
+BATCH_SIZE=1
+GRAD_ACCUM=8
 LEARNING_RATE=1e-6
 NUM_EPOCHS=1
 MAX_COMPLETION_LENGTH=2048
@@ -45,6 +45,7 @@ REWARD_TYPE="combined"
 LORA_R=32
 LORA_ALPHA=64
 SEED=42
+USE_4BIT=true
 
 # =============================================================================
 # Environment Setup
@@ -118,6 +119,7 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --reward_type $REWARD_TYPE \
     --bf16 \
     --gradient_checkpointing \
+    --use_4bit \
     --use_liger_kernel \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \

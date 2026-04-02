@@ -44,6 +44,7 @@ REWARD_TYPE="combined"
 LORA_R=16
 LORA_ALPHA=32
 SEED=42
+USE_4BIT=true
 
 # =============================================================================
 # Environment Setup
@@ -117,6 +118,7 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --reward_type $REWARD_TYPE \
     --bf16 \
     --gradient_checkpointing \
+    --use_4bit \
     --use_liger_kernel \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \

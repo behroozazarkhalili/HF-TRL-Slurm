@@ -287,9 +287,23 @@ def load_and_prepare_dataset(args):
                 if prompt and answer:
                     GROUND_TRUTH_ANSWERS[hash(prompt)] = answer
                 samples.append({"prompt": prompt})
+            elif "NuminaMath" in args.dataset_name or "numina" in args.dataset_name.lower():
+                # Handle AI-MO/NuminaMath-CoT format: answer is in \boxed{} inside 'solution'
+                prompt = example.get("problem", "")
+                solution = example.get("solution", "")
+                if prompt and solution:
+                    answer = extract_answer(solution)
+                    if answer:
+                        GROUND_TRUTH_ANSWERS[hash(prompt)] = answer
+                samples.append({"prompt": prompt})
             else:
-                # Generic handling
+                # Generic handling — try to extract answer from 'solution' field if present
                 prompt = example.get("prompt") or example.get("problem") or example.get("question") or ""
+                solution = example.get("solution", "")
+                if prompt and solution:
+                    answer = extract_answer(solution)
+                    if answer:
+                        GROUND_TRUTH_ANSWERS[hash(prompt)] = answer
                 samples.append({"prompt": prompt})
 
             if (i + 1) % 10000 == 0:
@@ -359,6 +373,32 @@ def load_and_prepare_dataset(args):
             # Keep only necessary columns for GRPO
             columns_to_keep = ["prompt"]
             columns_to_remove = [col for col in dataset.column_names if col not in columns_to_keep]
+            if columns_to_remove:
+                dataset = dataset.remove_columns(columns_to_remove)
+                print(f"Removed columns: {columns_to_remove}")
+
+        # Handle AI-MO/NuminaMath-CoT format: answer is in \boxed{} inside 'solution'
+        elif "NuminaMath" in args.dataset_name or "numina" in args.dataset_name.lower():
+            print("Detected NuminaMath-CoT dataset format")
+
+            # Extract ground truth from \boxed{} in solution field
+            if "solution" in dataset.column_names:
+                for example in dataset:
+                    problem = example.get("problem", "")
+                    solution = example.get("solution", "")
+                    if problem and solution:
+                        answer = extract_answer(solution)
+                        if answer:
+                            GROUND_TRUTH_ANSWERS[hash(problem)] = answer
+                print(f"Stored {len(GROUND_TRUTH_ANSWERS)} ground truth answers")
+
+            # Rename 'problem' to 'prompt'
+            if "problem" in dataset.column_names and "prompt" not in dataset.column_names:
+                dataset = dataset.rename_column("problem", "prompt")
+                print("Renamed 'problem' to 'prompt'")
+
+            # Keep only prompt column
+            columns_to_remove = [col for col in dataset.column_names if col != "prompt"]
             if columns_to_remove:
                 dataset = dataset.remove_columns(columns_to_remove)
                 print(f"Removed columns: {columns_to_remove}")

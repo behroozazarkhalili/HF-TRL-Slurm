@@ -26,7 +26,7 @@ DATASET_NAME="AI-MO/NuminaMath-CoT"
 HUB_MODEL_ID="ermiaazarkhalili/Nemotron-Flash-3B-Instruct-GRPO-NuminaMath"
 GGUF_REPO_ID="ermiaazarkhalili/Nemotron-Flash-3B-Instruct-GRPO-NuminaMath-GGUF"
 
-# GRPO Training parameters
+# GRPO Training parameters (tuned for 40GB MIG slice)
 BATCH_SIZE=1
 GRAD_ACCUM=4
 LEARNING_RATE=5e-7
@@ -39,6 +39,7 @@ LORA_R=16
 LORA_ALPHA=32
 MAX_SAMPLES=10000
 SEED=42
+USE_4BIT=true
 
 # =============================================================================
 # Environment Setup
@@ -112,6 +113,7 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --reward_type $REWARD_TYPE \
     --bf16 \
     --gradient_checkpointing \
+    --use_4bit \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \
     --lora_dropout 0.05 \
