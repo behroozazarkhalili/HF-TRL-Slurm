@@ -168,12 +168,20 @@ def load_model_and_tokenizer(args):
     """Load model and tokenizer with optional quantization."""
     print(f"Loading model: {args.model_name_or_path}")
 
+    # Auto-detect precision: bf16 may not be available on some MIG partitions
+    if args.bf16 and not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
+        print("WARNING: bf16 requested but not supported on this GPU. Falling back to fp16.")
+        args.bf16 = False
+        args.fp16 = True
+
+    compute_dtype = torch.bfloat16 if args.bf16 else torch.float16 if args.fp16 else torch.float32
+
     # Quantization config
     quantization_config = None
     if args.use_4bit:
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_compute_dtype=compute_dtype,
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type="nf4",
         )
@@ -184,7 +192,7 @@ def load_model_and_tokenizer(args):
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
         quantization_config=quantization_config,
-        torch_dtype=torch.bfloat16 if args.bf16 else torch.float16 if args.fp16 else torch.float32,
+        torch_dtype=compute_dtype,
         device_map="auto",
         trust_remote_code=True,
     )

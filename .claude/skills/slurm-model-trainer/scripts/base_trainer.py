@@ -493,12 +493,19 @@ class BaseTrainerScript(ABC):
         """
         print(f"Loading model: {self.args.model_name_or_path}")
 
+        # Auto-detect precision: bf16 may not be available on some MIG partitions
+        if self.args.bf16 and not torch.cuda.is_bf16_supported():
+            print("WARNING: bf16 requested but not supported on this GPU. Falling back to fp16.")
+            self.args.bf16 = False
+            self.args.fp16 = True
+
         # Quantization config
+        compute_dtype = torch.bfloat16 if self.args.bf16 else torch.float16 if self.args.fp16 else torch.float32
         quantization_config = None
         if self.args.use_4bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_compute_dtype=compute_dtype,
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4",
             )

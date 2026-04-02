@@ -9,7 +9,7 @@ import re
 from typing import Dict, List, Optional
 
 from .base import RewardFunction
-from .math_reward import MathRewardFunction, extract_answer, normalize_answer
+from .math_reward import MathRewardFunction, extract_answer, normalize_answer, _prompt_key, _try_parse_number
 from .format_reward import FormatRewardFunction
 from .length_reward import LengthRewardFunction
 
@@ -26,7 +26,7 @@ class CombinedRewardFunction(RewardFunction):
     The weights can be customized for different training objectives.
 
     Attributes:
-        ground_truth: Dictionary mapping prompt hashes to answers.
+        ground_truth: Dictionary mapping prompt keys to answers.
         weights: Dictionary of component weights.
     """
 
@@ -39,18 +39,18 @@ class CombinedRewardFunction(RewardFunction):
 
     def __init__(
         self,
-        ground_truth: Optional[Dict[int, str]] = None,
+        ground_truth: Optional[Dict[str, str]] = None,
         weights: Optional[Dict[str, float]] = None
     ):
         """Initialize the combined reward function.
 
         Args:
-            ground_truth: Dictionary mapping prompt hashes to answers.
+            ground_truth: Dictionary mapping prompt keys to answers.
             weights: Custom weights for reward components.
                     Keys: 'accuracy', 'format', 'length', 'reasoning'
         """
         super().__init__(name="combined")
-        self.ground_truth: Dict[int, str] = ground_truth or {}
+        self.ground_truth: Dict[str, str] = ground_truth or {}
         self.weights = weights or self.DEFAULT_WEIGHTS.copy()
 
         # Normalize weights to sum to 1
@@ -65,7 +65,7 @@ class CombinedRewardFunction(RewardFunction):
             prompt: The problem prompt.
             answer: The expected answer.
         """
-        self.ground_truth[hash(prompt)] = answer
+        self.ground_truth[_prompt_key(prompt)] = answer
 
     def compute(
         self,
@@ -123,8 +123,8 @@ class CombinedRewardFunction(RewardFunction):
     def _compute_accuracy(self, completion: str, prompt: str) -> float:
         """Compute accuracy score."""
         predicted_answer = extract_answer(completion)
-        prompt_hash = hash(prompt)
-        ground_truth = self.ground_truth.get(prompt_hash)
+        prompt_key = _prompt_key(prompt)
+        ground_truth = self.ground_truth.get(prompt_key)
 
         if predicted_answer and ground_truth:
             pred_norm = normalize_answer(predicted_answer)
@@ -137,13 +137,11 @@ class CombinedRewardFunction(RewardFunction):
                 return 0.7
 
             # Numerical comparison
-            try:
-                pred_num = float(re.sub(r'[^\d.-]', '', pred_norm))
-                gt_num = float(re.sub(r'[^\d.-]', '', gt_norm))
+            pred_num = _try_parse_number(pred_norm)
+            gt_num = _try_parse_number(gt_norm)
+            if pred_num is not None and gt_num is not None:
                 if abs(pred_num - gt_num) < 1e-6:
                     return 1.0
-            except (ValueError, TypeError):
-                pass
 
             return 0.0
 

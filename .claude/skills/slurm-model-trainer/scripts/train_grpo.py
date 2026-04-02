@@ -65,7 +65,22 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from trl import GRPOConfig, GRPOTrainer
 
 # Global variable to store ground truth answers for reward computation
+# Keys are raw prompt strings (not hash()) to avoid PYTHONHASHSEED non-determinism
+# and chat-template mismatch issues
 GROUND_TRUTH_ANSWERS: Dict[str, str] = {}
+
+
+def _prompt_key(prompt: str) -> str:
+    """Create a stable lookup key from a prompt string.
+
+    Strips whitespace and chat template tokens to ensure ground truth stored
+    during dataset loading can be found during reward computation, even if
+    TRL applies a chat template wrapper to the prompt.
+    """
+    import re
+    # Strip common chat template tokens
+    key = re.sub(r'<\|[^|]*\|>', '', prompt)
+    return key.strip()
 
 # Try to import trackio
 try:
@@ -203,12 +218,15 @@ def load_model_and_tokenizer(args):
     """Load model and tokenizer with optional quantization."""
     print(f"Loading model: {args.model_name_or_path}")
 
+    # Determine compute dtype (bf16/fp16 already auto-detected and corrected by main())
+    compute_dtype = torch.bfloat16 if args.bf16 else torch.float16 if args.fp16 else torch.float32
+
     # Quantization config
     quantization_config = None
     if args.use_4bit:
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_compute_dtype=compute_dtype,
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type="nf4",
         )
@@ -219,7 +237,7 @@ def load_model_and_tokenizer(args):
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
         quantization_config=quantization_config,
-        torch_dtype=torch.bfloat16 if args.bf16 else torch.float16 if args.fp16 else torch.float32,
+        torch_dtype=compute_dtype,
         device_map="auto",
         trust_remote_code=True,
     )
@@ -278,15 +296,13 @@ def load_and_prepare_dataset(args):
                 prompt = example.get("problem", "")
                 answer = example.get("expected_answer", "")
                 if prompt and answer:
-                    GROUND_TRUTH_ANSWERS[hash(prompt)] = answer
-                samples.append({"prompt": prompt})
+                    GROUND_TRUTH_ANSWERS[_prompt_key(prompt)] = answer
             elif "open-r1/OpenR1-Math" in args.dataset_name or "openr1" in args.dataset_name.lower():
                 # Handle OpenR1-Math format
                 prompt = example.get("problem", "")
                 answer = example.get("answer", "")
                 if prompt and answer:
-                    GROUND_TRUTH_ANSWERS[hash(prompt)] = answer
-                samples.append({"prompt": prompt})
+                    GROUND_TRUTH_ANSWERS[_prompt_key(prompt)] = answer
             elif "NuminaMath" in args.dataset_name or "numina" in args.dataset_name.lower():
                 # Handle AI-MO/NuminaMath-CoT format: answer is in \boxed{} inside 'solution'
                 prompt = example.get("problem", "")
@@ -294,8 +310,7 @@ def load_and_prepare_dataset(args):
                 if prompt and solution:
                     answer = extract_answer(solution)
                     if answer:
-                        GROUND_TRUTH_ANSWERS[hash(prompt)] = answer
-                samples.append({"prompt": prompt})
+                        GROUND_TRUTH_ANSWERS[_prompt_key(prompt)] = answer
             else:
                 # Generic handling — try to extract answer from 'solution' field if present
                 prompt = example.get("prompt") or example.get("problem") or example.get("question") or ""
@@ -303,8 +318,13 @@ def load_and_prepare_dataset(args):
                 if prompt and solution:
                     answer = extract_answer(solution)
                     if answer:
-                        GROUND_TRUTH_ANSWERS[hash(prompt)] = answer
+                        GROUND_TRUTH_ANSWERS[_prompt_key(prompt)] = answer
+
+            # Skip empty/whitespace-only prompts
+            if prompt and prompt.strip():
                 samples.append({"prompt": prompt})
+            else:
+                continue
 
             if (i + 1) % 10000 == 0:
                 print(f"  Processed {i + 1} samples...")
@@ -336,7 +356,7 @@ def load_and_prepare_dataset(args):
                     problem = example.get("problem", "")
                     answer = example.get("expected_answer", "")
                     if problem and answer:
-                        GROUND_TRUTH_ANSWERS[hash(problem)] = answer
+                        GROUND_TRUTH_ANSWERS[_prompt_key(problem)] = answer
                 print(f"Stored {len(GROUND_TRUTH_ANSWERS)} ground truth answers")
 
             # Rename 'problem' to 'prompt'
@@ -362,7 +382,7 @@ def load_and_prepare_dataset(args):
                     answer = example.get("answer", "")
                     if problem and answer:
                         # Use hash of problem as key to avoid memory issues with long strings
-                        GROUND_TRUTH_ANSWERS[hash(problem)] = answer
+                        GROUND_TRUTH_ANSWERS[_prompt_key(problem)] = answer
                 print(f"Stored {len(GROUND_TRUTH_ANSWERS)} ground truth answers")
 
             # Rename 'problem' to 'prompt' if needed
@@ -389,7 +409,7 @@ def load_and_prepare_dataset(args):
                     if problem and solution:
                         answer = extract_answer(solution)
                         if answer:
-                            GROUND_TRUTH_ANSWERS[hash(problem)] = answer
+                            GROUND_TRUTH_ANSWERS[_prompt_key(problem)] = answer
                 print(f"Stored {len(GROUND_TRUTH_ANSWERS)} ground truth answers")
 
             # Rename 'problem' to 'prompt'
@@ -439,11 +459,46 @@ def create_peft_config(args) -> LoraConfig:
     )
 
 
+def _extract_boxed_content(text: str) -> Optional[str]:
+    """Extract content from the LAST \\boxed{...} handling nested braces correctly.
+
+    Uses a brace-depth counter instead of regex to handle cases like
+    \\boxed{\\frac{3}{4}} or \\boxed{x^{2} + 1}.
+
+    Finds the LAST occurrence because math solutions typically present
+    the final answer in the last \\boxed{} (earlier ones may be intermediate steps).
+    """
+    # Find the LAST occurrence of \boxed{
+    idx = text.rfind('\\boxed{')
+    if idx == -1:
+        idx = text.rfind('\\boxed {')
+    if idx == -1:
+        return None
+
+    # Find the opening brace
+    brace_start = text.find('{', idx)
+    if brace_start == -1:
+        return None
+
+    depth = 1
+    pos = brace_start + 1
+    while pos < len(text) and depth > 0:
+        if text[pos] == '{':
+            depth += 1
+        elif text[pos] == '}':
+            depth -= 1
+        pos += 1
+
+    if depth == 0:
+        return text[brace_start + 1:pos - 1].strip()
+    return None
+
+
 def extract_answer(text: str) -> Optional[str]:
     """Extract the final answer from a math solution.
 
     Looks for common answer formats:
-    - \\boxed{answer}
+    - \\boxed{answer} (with proper nested brace handling)
     - The answer is X
     - Final answer: X
     - = X (at the end)
@@ -451,16 +506,10 @@ def extract_answer(text: str) -> Optional[str]:
     if not text:
         return None
 
-    # Try to find boxed answer first (LaTeX format)
-    boxed_patterns = [
-        r'\\boxed\{([^}]+)\}',
-        r'\\boxed\s*\{([^}]+)\}',
-        r'\$\\boxed\{([^}]+)\}\$',
-    ]
-    for pattern in boxed_patterns:
-        match = re.search(pattern, text)
-        if match:
-            return match.group(1).strip()
+    # Try to find boxed answer first (LaTeX format) — use brace-depth parser
+    boxed = _extract_boxed_content(text)
+    if boxed:
+        return boxed
 
     # Try common answer phrases
     answer_patterns = [
@@ -491,13 +540,20 @@ def normalize_answer(answer: str) -> str:
     # Remove whitespace and convert to lowercase
     answer = answer.strip().lower()
 
-    # Remove common LaTeX formatting
-    answer = re.sub(r'\\text\{([^}]+)\}', r'\1', answer)
-    answer = re.sub(r'\\mathrm\{([^}]+)\}', r'\1', answer)
+    # Convert LaTeX fractions to a/b BEFORE stripping (prevents \frac{5}{9} -> "59")
+    # Pattern handles one level of nested braces: \frac{3\sqrt{3}}{2} -> 3\sqrt{3}/2
+    answer = re.sub(r'\\frac\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}', r'\1/\2', answer)
+
+    # Remove common LaTeX formatting that wraps content
+    answer = re.sub(r'\\text\s*\{([^}]+)\}', r'\1', answer)
+    answer = re.sub(r'\\mathrm\s*\{([^}]+)\}', r'\1', answer)
+    answer = re.sub(r'\\sqrt\s*\{([^}]+)\}', r'sqrt(\1)', answer)
+
+    # Remove remaining LaTeX commands
     answer = re.sub(r'\\[a-zA-Z]+', '', answer)
     answer = re.sub(r'[{}$]', '', answer)
 
-    # Normalize fractions
+    # Normalize fractions (plain text a / b -> a/b)
     answer = re.sub(r'(\d+)\s*/\s*(\d+)', r'\1/\2', answer)
 
     # Remove trailing punctuation
@@ -556,6 +612,29 @@ def detect_reward_type(dataset_name: str, sample_prompts: List[str]) -> str:
     return "accuracy"
 
 
+def _try_parse_number(s: str) -> Optional[float]:
+    """Try to parse a normalized answer string as a number.
+
+    Handles plain floats, simple fractions (3/4), and avoids mangling
+    non-numeric strings.
+    """
+    s = s.strip()
+    # Direct float
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    # Simple fraction like 3/4
+    if '/' in s:
+        parts = s.split('/')
+        if len(parts) == 2:
+            try:
+                return float(parts[0]) / float(parts[1])
+            except (ValueError, ZeroDivisionError):
+                pass
+    return None
+
+
 def create_reward_function(reward_type: str):
     """Create reward function based on type.
 
@@ -578,7 +657,7 @@ def create_reward_function(reward_type: str):
                     # === MATH ACCURACY (50% weight) ===
                     accuracy_score = 0.0
                     predicted_answer = extract_answer(completion)
-                    prompt_hash = hash(prompt)
+                    prompt_hash = _prompt_key(prompt)
                     ground_truth = GROUND_TRUTH_ANSWERS.get(prompt_hash, None)
 
                     if predicted_answer and ground_truth:
@@ -590,13 +669,11 @@ def create_reward_function(reward_type: str):
                         elif pred_norm in gt_norm or gt_norm in pred_norm:
                             accuracy_score = 0.7  # Partial match
                         else:
-                            try:
-                                pred_num = float(re.sub(r'[^\d.-]', '', pred_norm))
-                                gt_num = float(re.sub(r'[^\d.-]', '', gt_norm))
+                            pred_num = _try_parse_number(pred_norm)
+                            gt_num = _try_parse_number(gt_norm)
+                            if pred_num is not None and gt_num is not None:
                                 if abs(pred_num - gt_num) < 1e-6:
                                     accuracy_score = 1.0  # Numerically equal
-                            except (ValueError, TypeError):
-                                pass
                     elif predicted_answer:
                         accuracy_score = 0.3  # Has answer but no ground truth
 
@@ -661,7 +738,7 @@ def create_reward_function(reward_type: str):
                     predicted_answer = extract_answer(completion)
 
                     # Get ground truth if available
-                    prompt_hash = hash(prompt)
+                    prompt_hash = _prompt_key(prompt)
                     ground_truth = GROUND_TRUTH_ANSWERS.get(prompt_hash, None)
 
                     if predicted_answer and ground_truth:
@@ -675,14 +752,11 @@ def create_reward_function(reward_type: str):
                             rewards.append(0.7)  # Partial match
                         else:
                             # Check if both are numbers and approximately equal
-                            try:
-                                pred_num = float(re.sub(r'[^\d.-]', '', pred_norm))
-                                gt_num = float(re.sub(r'[^\d.-]', '', gt_norm))
-                                if abs(pred_num - gt_num) < 1e-6:
-                                    rewards.append(1.0)  # Numerically equal
-                                else:
-                                    rewards.append(0.0)
-                            except (ValueError, TypeError):
+                            pred_num = _try_parse_number(pred_norm)
+                            gt_num = _try_parse_number(gt_norm)
+                            if pred_num is not None and gt_num is not None and abs(pred_num - gt_num) < 1e-6:
+                                rewards.append(1.0)  # Numerically equal
+                            else:
                                 rewards.append(0.0)
                     elif predicted_answer:
                         # Has an answer but no ground truth to compare
@@ -746,6 +820,23 @@ def create_reward_function(reward_type: str):
         return reward_fn
 
 
+def print_gpu_diagnostics():
+    """Print GPU environment info for debugging node-specific issues."""
+    import os
+    print("\n--- GPU Diagnostics ---")
+    print(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'NOT SET')}")
+    print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
+    print(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
+    if torch.cuda.is_available() and torch.cuda.device_count() > 0:
+        props = torch.cuda.get_device_properties(0)
+        print(f"Device: {props.name} (compute {props.major}.{props.minor}, {props.total_memory / 1024**3:.1f} GB)")
+        print(f"bf16 supported: {torch.cuda.is_bf16_supported()}")
+    else:
+        print("ERROR: No GPU detected! Training will fail or run on CPU.")
+        print("Check: CUDA_VISIBLE_DEVICES, driver version, MIG configuration.")
+    print("---\n")
+
+
 def main():
     args = parse_args()
 
@@ -754,6 +845,15 @@ def main():
     print("=" * 60)
     print(f"Number of generations: {args.num_generations}")
     print(f"Reward type: {args.reward_type}")
+
+    print_gpu_diagnostics()
+
+    # Auto-detect precision BEFORE loading model: bf16 may not be available on MIG partitions
+    if args.bf16:
+        if not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
+            print("WARNING: bf16 requested but not supported on this GPU. Falling back to fp16.")
+            args.bf16 = False
+            args.fp16 = True
 
     # Initialize tracking (logs locally by default, set space_id for HF Space)
     if args.report_to == "trackio" and TRACKIO_AVAILABLE:
@@ -783,21 +883,9 @@ def main():
     # Load dataset
     train_dataset = load_and_prepare_dataset(args)
 
-    # Auto-detect reward type if using default 'combined'
-    if args.reward_type == "combined":
-        # Extract sample prompts for analysis
-        sample_prompts = []
-        if hasattr(train_dataset, '__len__') and len(train_dataset) > 0:
-            sample_size = min(10, len(train_dataset))
-            for i in range(sample_size):
-                sample = train_dataset[i]
-                if isinstance(sample, dict) and 'prompt' in sample:
-                    sample_prompts.append(sample['prompt'])
-        # Auto-detect appropriate reward type
-        detected_type = detect_reward_type(args.dataset_name, sample_prompts)
-        if detected_type != "combined":
-            print(f"Auto-switching reward type from 'combined' to '{detected_type}'")
-            args.reward_type = detected_type
+    # Note: 'combined' reward already includes math accuracy at 50% weight,
+    # so no auto-downgrade to 'math' — combined is strictly better for math datasets
+    # as it also rewards format, length, and reasoning quality.
 
     # Create LoRA config
     peft_config = create_peft_config(args)
@@ -824,7 +912,7 @@ def main():
         weight_decay=args.weight_decay,
         warmup_ratio=args.warmup_ratio,
 
-        # Precision
+        # Precision (args already corrected by auto-detection above)
         bf16=args.bf16,
         fp16=args.fp16,
 
