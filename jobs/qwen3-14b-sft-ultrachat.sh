@@ -6,12 +6,13 @@
 
 #SBATCH --job-name=qwen3-14b-sft-ultrachat
 #SBATCH --account=def-maxwl_gpu
-#SBATCH --time=4-00:00:00
+#SBATCH --time=7-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
+#SBATCH --partition=gpubase_bygpu_b5
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 #SBATCH --mail-type=BEGIN,END,FAIL

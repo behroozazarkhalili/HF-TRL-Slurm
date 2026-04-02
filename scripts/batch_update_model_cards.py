@@ -141,26 +141,63 @@ SFT_ULTRACHAT_MODELS = [
 ]
 
 # ============================================================================
-# GRPO NuminaMath Models
+# GRPO NuminaMath Models (with sample size in naming)
 # ============================================================================
 GRPO_NUMINA_MODELS = [
+    # LFM2 10K models (completed)
     ModelConfig(
-        hub_model_id="ermiaazarkhalili/LFM2-1.2B-GRPO-NuminaMath",
-        model_name="LFM2-1.2B-GRPO-NuminaMath",
-        base_model="LiquidAI/LFM2-1.2B",
+        hub_model_id="ermiaazarkhalili/LFM2-350M-GRPO-NuminaMath-10K",
+        model_name="LFM2-350M-GRPO-NuminaMath-10K",
+        base_model="LiquidAI/LFM2-350M",
         dataset="AI-MO/NuminaMath-CoT",
         training_method="GRPO",
-        output_dir="/scratch/ermia/outputs/lfm2-1.2b-grpo-numina-16737228",
+        output_dir="/scratch/ermia/outputs/lfm2-350m-grpo-numina-16912214",
         lora_r=16,
         lora_alpha=32,
         batch_size=1,
-        max_length=4096,
-        learning_rate=1e-6,
+        max_length=2048,
+        learning_rate=5e-7,
         train_samples=10000,
         eval_samples=0,
         num_generations=2,
         reward_type="combined",
-        hardware="NVIDIA H100 20GB MIG",
+        hardware="NVIDIA H100 40GB MIG (3g.40gb)",
+    ),
+    ModelConfig(
+        hub_model_id="ermiaazarkhalili/LFM2-700M-GRPO-NuminaMath-10K",
+        model_name="LFM2-700M-GRPO-NuminaMath-10K",
+        base_model="LiquidAI/LFM2-700M",
+        dataset="AI-MO/NuminaMath-CoT",
+        training_method="GRPO",
+        output_dir="/scratch/ermia/outputs/lfm2-700m-grpo-numina-16912215",
+        lora_r=16,
+        lora_alpha=32,
+        batch_size=1,
+        max_length=2048,
+        learning_rate=5e-7,
+        train_samples=10000,
+        eval_samples=0,
+        num_generations=2,
+        reward_type="combined",
+        hardware="NVIDIA H100 40GB MIG (3g.40gb)",
+    ),
+    ModelConfig(
+        hub_model_id="ermiaazarkhalili/LFM2-1.2B-GRPO-NuminaMath-10K",
+        model_name="LFM2-1.2B-GRPO-NuminaMath-10K",
+        base_model="LiquidAI/LFM2-1.2B",
+        dataset="AI-MO/NuminaMath-CoT",
+        training_method="GRPO",
+        output_dir="/scratch/ermia/outputs/lfm2-1.2b-grpo-numina-16912216",
+        lora_r=16,
+        lora_alpha=32,
+        batch_size=1,
+        max_length=2048,
+        learning_rate=5e-7,
+        train_samples=10000,
+        eval_samples=0,
+        num_generations=2,
+        reward_type="combined",
+        hardware="NVIDIA H100 40GB MIG (3g.40gb)",
     ),
 ]
 

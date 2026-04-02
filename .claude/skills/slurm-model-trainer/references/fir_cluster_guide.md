@@ -10,22 +10,40 @@ The Fir cluster is part of the Digital Research Alliance of Canada (DRAC) infras
 
 | Type | VRAM | GRES Request | Best For |
 |------|------|--------------|----------|
-| H100 (full) | 80GB | `gpu:h100:1` | Large models (7B-70B) |
+| **H100 (full)** | 80GB | `gpu:h100:1` | Large models (7B-70B), multi-GPU |
 | H100 MIG 3g.40gb | 40GB | `gpu:nvidia_h100_80gb_hbm3_3g.40gb:1` | Medium models (3B-13B) |
 | H100 MIG 2g.20gb | 20GB | `gpu:nvidia_h100_80gb_hbm3_2g.20gb:1` | Small models (0.5B-3B) |
-| H100 MIG 1g.10gb | 10GB | `gpu:nvidia_h100_80gb_hbm3_1g.10gb:1` | Testing, tiny models |
+| H100 MIG 1g.10gb | 10GB | `gpu:nvidia_h100_80gb_hbm3_1g.10gb:1` | Testing, tiny models (<1B) |
 
 ### Partitions
 
+#### Single/Multiple GPU Partitions (`gpubase_bygpu_*`)
+
+| Partition | Time Limit | Priority | Use Case |
+|-----------|------------|----------|----------|
+| `gpubase_bygpu_b1` | 3 hours | Highest | Quick tests, debugging |
+| `gpubase_bygpu_b2` | 12 hours | High | Short training runs |
+| `gpubase_bygpu_b3` | 1 day | Medium | Standard training |
+| `gpubase_bygpu_b4` | 3 days | Medium-Low | Extended training |
+| `gpubase_bygpu_b5` | 7 days | Lower | Long GRPO/large model runs |
+
+#### Full Node Partitions (`gpubase_bynode_*`) - 4x H100 80GB
+
+| Partition | Time Limit | Use Case |
+|-----------|------------|----------|
+| `gpubase_bynode_b1` | 3 hours | Multi-GPU testing |
+| `gpubase_bynode_b2` | 12 hours | Short multi-GPU training |
+| `gpubase_bynode_b3` | 1 day | Standard multi-GPU |
+| `gpubase_bynode_b4` | 3 days | Extended multi-GPU |
+| `gpubase_bynode_b5` | 7 days | Long multi-GPU runs |
+
+#### Special Partitions
+
 | Partition | Time Limit | Notes |
 |-----------|------------|-------|
-| `gpubase_bygpu_b1` | 3 hours | Quick tests, high priority |
-| `gpubase_bygpu_b3` | 1 day | Standard training |
-| `gpubase_bygpu_b4` | 3 days | Extended training |
-| `gpubase_bygpu_b5` | 7 days | Long runs, lower priority |
-| `gpubase_bynode_b*` | Varies | Full node (4x H100) |
-| `gpubackfill` | Variable | May be preempted |
-| `gpupreempt` | Variable | Preemptable, low priority |
+| `gpubackfill` | 1 day | May be preempted, good for cost savings |
+| `gpupreempt` | 122 days | Will be preempted anytime, lowest priority |
+| `gpubase_interac` | 3 hours | Interactive sessions (MIG only) |
 
 ## Storage
 

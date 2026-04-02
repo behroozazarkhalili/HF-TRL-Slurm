@@ -11,7 +11,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --mem=32G
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
 #SBATCH --partition=gpubase_bygpu_b5
 #SBATCH --output=logs/%x-%j.out
@@ -23,12 +23,18 @@
 # =============================================================================
 MODEL_NAME="Qwen/Qwen3-0.6B"
 DATASET_NAME="AI-MO/NuminaMath-CoT"
-HUB_MODEL_ID="ermiaazarkhalili/Qwen3-0.6B-GRPO-NuminaMath"
-GGUF_REPO_ID="ermiaazarkhalili/Qwen3-0.6B-GRPO-NuminaMath-GGUF"
+
+# Sample size configuration
+MAX_SAMPLES=50000
+SAMPLE_SIZE_LABEL="50K"  # Human-readable format for model naming
+
+# Model naming with sample size
+HUB_MODEL_ID="ermiaazarkhalili/Qwen3-0.6B-GRPO-NuminaMath-${SAMPLE_SIZE_LABEL}"
+GGUF_REPO_ID="ermiaazarkhalili/Qwen3-0.6B-GRPO-NuminaMath-${SAMPLE_SIZE_LABEL}-GGUF"
 
 # GRPO Training parameters
-BATCH_SIZE=1
-GRAD_ACCUM=16
+BATCH_SIZE=2
+GRAD_ACCUM=4
 LEARNING_RATE=1e-6
 NUM_EPOCHS=1
 MAX_COMPLETION_LENGTH=2048
@@ -37,7 +43,6 @@ NUM_GENERATIONS=2
 REWARD_TYPE="combined"
 LORA_R=16
 LORA_ALPHA=32
-MAX_SAMPLES=10000
 SEED=42
 
 # =============================================================================
@@ -73,7 +78,7 @@ mkdir -p $OUTPUT_DIR
 echo ""
 echo "Configuration:"
 echo "  Model: $MODEL_NAME"
-echo "  Dataset: $DATASET_NAME (10K samples, streaming)"
+echo "  Dataset: $DATASET_NAME (${SAMPLE_SIZE_LABEL} samples, streaming)"
 echo "  Hub Model ID: $HUB_MODEL_ID"
 echo "  Reward Type: $REWARD_TYPE"
 echo "  Batch Size: $BATCH_SIZE"
@@ -106,12 +111,13 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --per_device_train_batch_size $BATCH_SIZE \
     --gradient_accumulation_steps $GRAD_ACCUM \
     --learning_rate $LEARNING_RATE \
-    --max_length $MAX_COMPLETION_LENGTH \
+    --max_completion_length $MAX_COMPLETION_LENGTH \
     --max_prompt_length $MAX_PROMPT_LENGTH \
     --num_generations $NUM_GENERATIONS \
     --reward_type $REWARD_TYPE \
     --bf16 \
     --gradient_checkpointing \
+    --use_liger_kernel \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \
     --lora_dropout 0.05 \
@@ -123,7 +129,6 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --hub_model_id $HUB_MODEL_ID \
     --hub_strategy end \
     --report_to trackio \
-    --trackio_dir $OUTPUT_DIR/trackio \
     --project "grpo-numina" \
     --run_name "qwen3-0.6b-grpo-numina-$SLURM_JOB_ID"
 
@@ -145,7 +150,7 @@ echo "Phase 2: Generating Model Card"
 echo "=========================================="
 
 python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/generate_model_card.py \
-    --model_name "Qwen3-0.6B-GRPO-NuminaMath" \
+    --model_name "Qwen3-0.6B-GRPO-NuminaMath-${SAMPLE_SIZE_LABEL}" \
     --base_model "$MODEL_NAME" \
     --dataset "$DATASET_NAME" \
     --training_method GRPO \
@@ -154,10 +159,10 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --learning_rate $LEARNING_RATE \
     --batch_size $BATCH_SIZE \
     --epochs $NUM_EPOCHS \
-    --max_length $MAX_COMPLETION_LENGTH \
+    --max_completion_length $MAX_COMPLETION_LENGTH \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \
-    --hardware "NVIDIA H100 40GB MIG" \
+    --hardware "NVIDIA H100 20GB MIG" \
     --output_dir $OUTPUT_DIR/model_card
 
 # Push model card to Hub

@@ -6,12 +6,13 @@
 
 #SBATCH --job-name=qwen2.5-7b-sft-ultrachat
 #SBATCH --account=def-maxwl_gpu
-#SBATCH --time=2-00:00:00
+#SBATCH --time=7-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
+#SBATCH --partition=gpubase_bygpu_b5
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 #SBATCH --mail-type=BEGIN,END,FAIL
@@ -25,13 +26,14 @@ HUB_MODEL_ID="ermiaazarkhalili/Qwen2.5-7B-SFT-UltraChat"
 GGUF_REPO_ID="ermiaazarkhalili/Qwen2.5-7B-SFT-UltraChat-GGUF"
 
 # Training parameters (Large model config - 4-bit QLoRA, optimized for 40GB MIG)
+# Reduced LoRA rank and grad_accum to prevent OOM
 BATCH_SIZE=1
-GRAD_ACCUM=16
+GRAD_ACCUM=4
 LEARNING_RATE=2e-4
 NUM_EPOCHS=1
 MAX_SEQ_LENGTH=2048
-LORA_R=64
-LORA_ALPHA=128
+LORA_R=32
+LORA_ALPHA=64
 
 # =============================================================================
 # Environment Setup

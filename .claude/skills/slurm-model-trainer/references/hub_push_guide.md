@@ -81,13 +81,21 @@ python train.py \
 
 Recommended naming format:
 ```
-{base_model}-{dataset}-{method}[-{version}]
+{BaseModel}-{TrainingMethod}-{Dataset}[-{SampleSize}][-GGUF]
 ```
 
+**Sample Size Formatting:**
+| Sample Count | Label |
+|--------------|-------|
+| < 1,000 | Raw number (e.g., "500") |
+| 1,000 - 999,999 | K format (e.g., "10K", "100K") |
+| ≥ 1,000,000 | M format (e.g., "1M", "5M") |
+
 Examples:
-- `ermiaazarkhalili/qwen2.5-0.5b-capybara-sft`
-- `ermiaazarkhalili/llama2-7b-ultrafeedback-dpo`
-- `ermiaazarkhalili/mistral-7b-math-grpo-v2`
+- `ermiaazarkhalili/Qwen2.5-0.5B-SFT-Capybara` - Full dataset
+- `ermiaazarkhalili/LFM2-350M-GRPO-NuminaMath-10K` - 10K samples
+- `ermiaazarkhalili/SmolLM2-1.7B-GRPO-NuminaMath-100K` - 100K samples
+- `ermiaazarkhalili/LFM2-350M-GRPO-NuminaMath-10K-GGUF` - GGUF version
 
 ## Hub Push Strategies
 

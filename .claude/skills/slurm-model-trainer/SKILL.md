@@ -1,3 +1,8 @@
+---
+name: slurm-model-trainer
+description: Trains, evaluates, and deploys language models on Fir cluster (DRAC) using SLURM with TRL/Unsloth. Use when user mentions training, fine-tuning, SFT, DPO, GRPO, sbatch, SLURM jobs, Fir cluster, DRAC, lm-eval evaluation, GGUF conversion, or Ollama deployment. Supports LoRA/PEFT, Trackio monitoring, and automatic HuggingFace Hub push.
+---
+
 # Slurm Model Trainer for Fir Cluster (DRAC)
 
 ## Overview
@@ -7,7 +12,7 @@ Train, evaluate, and deploy language models on the **Fir cluster** (Digital Rese
 **Automatic HuggingFace Integration:**
 - Comprehensive README.md generation for model pages
 - GGUF conversion with separate repository
-- Proper naming convention: `{BaseModel}-{TrainingMethod}-{Dataset}[-GGUF]`
+- Proper naming convention: `{BaseModel}-{TrainingMethod}-{Dataset}[-{SampleSize}][-GGUF]`
 
 **Training Methods:**
 - **SFT** (Supervised Fine-Tuning) - Standard instruction tuning
@@ -26,24 +31,42 @@ hf_doc_fetch("https://huggingface.co/docs/trl/sft_trainer")
 
 ## When to Use This Skill
 
-Use this skill when users want to:
-- Fine-tune language models on the Fir cluster (DRAC)
-- Train with TRL methods (SFT, DPO, GRPO) using Slurm jobs
-- Use Unsloth for 2-3x faster training
-- Evaluate models with lm-eval-harness after training
-- Convert trained models to GGUF for Ollama/llama.cpp
-- Create automated training pipelines (train → eval → convert)
+**Trigger this skill when user:**
+- Asks to "train", "fine-tune", or "finetune" a model
+- Mentions "SLURM", "sbatch", "Fir cluster", or "DRAC"
+- Wants to run SFT, DPO, or GRPO training
+- Needs to evaluate models with lm-eval-harness
+- Wants to convert models to GGUF for Ollama/llama.cpp
+- Asks to create automated training pipelines (train → eval → convert)
+- References training on HPC or compute cluster
+
+**Common user phrases:**
+- "Train Qwen on math dataset"
+- "Fine-tune LLaMA with DPO"
+- "Submit a GRPO training job"
+- "Evaluate my model on reasoning benchmarks"
+- "Convert model to GGUF for local inference"
 
 ## Key Directives
 
-When assisting with training jobs:
+### ALWAYS
 
-1. **Generate SBATCH scripts** - Create job scripts using templates in `templates/`
-2. **Always include Trackio** - Every training script should use Trackio for monitoring
-3. **Provide job submission commands** - Give the user the exact `sbatch` command to run
-4. **Use appropriate hardware** - Match GPU type to model size (see Hardware Selection)
-5. **Include evaluation** - Offer to create evaluation jobs after training
-6. **Push to Hub** - Always configure Hub push to preserve trained models
+1. **Generate complete SBATCH scripts** - Never provide partial snippets; always generate fully executable job scripts
+2. **Include Trackio monitoring** - Every training job must use Trackio for real-time metrics tracking
+3. **Configure Hub push** - Compute nodes are ephemeral; always push models to HuggingFace Hub to preserve work
+4. **Estimate walltime with 30% buffer** - Use the walltime formula and add safety margin
+5. **Pre-download models/datasets** - Verify caching on login node before job submission (no internet on compute)
+6. **Match GPU to model size** - Use MIG partitions appropriately (see Hardware Selection table)
+7. **Generate model cards** - Every trained model needs a comprehensive README.md
+8. **Create GGUF versions** - Always offer GGUF conversion for local inference with Ollama
+
+### NEVER
+
+1. **Use hardcoded usernames or paths** - Use environment variables (`$USER`, `$SCRATCH`, `$PROJECT`)
+2. **Submit jobs without cache verification** - Always check model/dataset are pre-downloaded
+3. **Skip error handling** - Include exit code checks after each pipeline phase
+4. **Omit time estimates** - Always calculate expected duration before submission
+5. **Ignore OOM risks** - Validate GPU memory requirements for model size + training method
 
 ## Prerequisites Checklist
 
@@ -75,22 +98,44 @@ python -c "from datasets import load_dataset; load_dataset('trl-lib/Capybara')"
 
 ## Fir Cluster Hardware
 
+### GPU Types
+
 | GPU Type | VRAM | GRES Request | Model Size | Use Case |
 |----------|------|--------------|------------|----------|
-| `h100` (full) | 80GB | `--gres=gpu:h100:1` | 7B-70B | Large models, multi-GPU |
+| **H100 (full)** | 80GB | `--gres=gpu:h100:1` | 7B-70B | Large models, no quantization needed |
 | `3g.40gb` (MIG) | 40GB | `--gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1` | 3B-13B | Medium models |
 | `2g.20gb` (MIG) | 20GB | `--gres=gpu:nvidia_h100_80gb_hbm3_2g.20gb:1` | 0.5B-3B | Small models |
-| `1g.10gb` (MIG) | 10GB | `--gres=gpu:nvidia_h100_80gb_hbm3_1g.10gb:1` | <1B | Quick tests |
+| `1g.10gb` (MIG) | 10GB | `--gres=gpu:nvidia_h100_80gb_hbm3_1g.10gb:1` | <1B | Quick tests, tiny models |
 
 ### Partition Selection
 
+#### Single/Multiple GPU (`gpubase_bygpu_*`)
+
 | Partition | Time Limit | Priority | Use Case |
 |-----------|------------|----------|----------|
-| `gpubase_bygpu_b1` | 3 hours | Highest | Quick tests |
+| `gpubase_bygpu_b1` | 3 hours | Highest | Quick tests, debugging |
+| `gpubase_bygpu_b2` | 12 hours | High | Short training runs |
 | `gpubase_bygpu_b3` | 1 day | Medium | Standard training |
-| `gpubase_bygpu_b5` | 7 days | Lower | Long training runs |
-| `gpubase_bynode_b3` | 1 day | Medium | Multi-GPU (4x H100) |
-| `gpubackfill` | Variable | Low | Cost-effective, may be preempted |
+| `gpubase_bygpu_b4` | 3 days | Medium-Low | Extended training |
+| `gpubase_bygpu_b5` | 7 days | Lower | Long GRPO runs, large datasets |
+
+#### Full Node - 4x H100 80GB (`gpubase_bynode_*`)
+
+| Partition | Time Limit | Use Case |
+|-----------|------------|----------|
+| `gpubase_bynode_b1` | 3 hours | Multi-GPU testing |
+| `gpubase_bynode_b2` | 12 hours | Short multi-GPU training |
+| `gpubase_bynode_b3` | 1 day | Standard multi-GPU |
+| `gpubase_bynode_b4` | 3 days | Extended multi-GPU |
+| `gpubase_bynode_b5` | 7 days | Long multi-GPU runs |
+
+#### Special Partitions
+
+| Partition | Time Limit | Notes |
+|-----------|------------|-------|
+| `gpubackfill` | 1 day | May be preempted, cost-effective |
+| `gpupreempt` | 122 days | Will be preempted, lowest priority |
+| `gpubase_interac` | 3 hours | Interactive sessions (MIG only) |
 
 ### Memory Estimation
 
@@ -675,19 +720,28 @@ walltime_hours = estimated_hours * 1.3
 All models pushed to HuggingFace follow this naming convention:
 
 ```
-{BaseModel}-{TrainingMethod}-{Dataset}[-GGUF]
+{BaseModel}-{TrainingMethod}-{Dataset}[-{SampleSize}][-GGUF]
 ```
 
 **Examples:**
-- `Qwen2.5-7B-SFT-Capybara` - SFT trained on Capybara dataset
-- `Llama-3.1-8B-DPO-UltraFeedback` - DPO trained on UltraFeedback
+- `Qwen2.5-7B-SFT-Capybara` - SFT trained on full Capybara dataset
+- `LFM2-350M-GRPO-NuminaMath-10K` - GRPO trained on 10K samples
+- `SmolLM2-1.7B-GRPO-NuminaMath-100K` - GRPO trained on 100K samples
 - `Qwen2.5-7B-SFT-Capybara-GGUF` - GGUF quantized version
+
+**Sample Size Formatting:**
+| Sample Count | Label |
+|--------------|-------|
+| < 1,000 | Raw number (e.g., "500") |
+| 1,000 - 999,999 | K format (e.g., "10K", "100K") |
+| ≥ 1,000,000 | M format (e.g., "1M", "5M") |
 
 **Rules:**
 - Use hyphens (`-`) not underscores (`_`)
 - Base model name preserved (e.g., `Qwen2.5-7B`, not `qwen2.5-7b`)
 - Training method in uppercase (SFT, DPO, GRPO)
-- Dataset name as-is from source (e.g., `Capybara`)
+- Dataset name as-is from source (e.g., `Capybara`, `NuminaMath`)
+- Sample size suffix when using streaming with limited samples
 - GGUF suffix for quantized versions
 
 ### Automatic Model Card Generation

@@ -1,18 +1,17 @@
 #!/bin/bash
 # =============================================================================
-# Qwen2.5-14B-Instruct GRPO Training on nvidia/OpenMathInstruct-2
-# Full Pipeline: Train → Model Card → GGUF Conversion → HF Upload
-# Dataset: nvidia/OpenMathInstruct-2 (500K samples, streaming mode)
+# LFM2-700M SFT Training on UltraChat-200k
+# Full Pipeline: Train → Eval (MMLU, IFEval) → GGUF Conversion → HF Upload
 # =============================================================================
 
-#SBATCH --job-name=qwen2.5-14b-grpo-openmath2
+#SBATCH --job-name=lfm2-700m-sft-ultrachat
 #SBATCH --account=def-maxwl_gpu
 #SBATCH --time=7-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
+#SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_2g.20gb:1
 #SBATCH --partition=gpubase_bygpu_b5
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
@@ -21,24 +20,19 @@
 # =============================================================================
 # Configuration
 # =============================================================================
-MODEL_NAME="Qwen/Qwen2.5-14B-Instruct"
-DATASET_NAME="nvidia/OpenMathInstruct-2"
-HUB_MODEL_ID="ermiaazarkhalili/Qwen2.5-14B-Instruct-GRPO-OpenMath2"
-GGUF_REPO_ID="ermiaazarkhalili/Qwen2.5-14B-Instruct-GRPO-OpenMath2-GGUF"
+MODEL_NAME="LiquidAI/LFM2-700M"
+DATASET_NAME="HuggingFaceH4/ultrachat_200k"
+HUB_MODEL_ID="ermiaazarkhalili/LFM2-700M-SFT-UltraChat"
+GGUF_REPO_ID="ermiaazarkhalili/LFM2-700M-SFT-UltraChat-GGUF"
 
-# GRPO Training parameters
-BATCH_SIZE=1
+# Training parameters
+BATCH_SIZE=2
 GRAD_ACCUM=4
-LEARNING_RATE=5e-7
+LEARNING_RATE=2e-4
 NUM_EPOCHS=1
-MAX_COMPLETION_LENGTH=2048
-MAX_PROMPT_LENGTH=512
-NUM_GENERATIONS=2
-REWARD_TYPE="combined"
-LORA_R=16
-LORA_ALPHA=32
-MAX_SAMPLES=50000
-SEED=42
+MAX_SEQ_LENGTH=2048
+LORA_R=32
+LORA_ALPHA=64
 
 # =============================================================================
 # Environment Setup
@@ -61,7 +55,7 @@ source /scratch/ermia/venvs/hf_env/bin/activate
 export SCRATCH=${SCRATCH:-/scratch/$USER}
 export HF_HOME=$SCRATCH/.cache/huggingface
 export TRANSFORMERS_CACHE=$HF_HOME/hub
-export OUTPUT_DIR=$SCRATCH/outputs/qwen2.5-14b-grpo-$SLURM_JOB_ID
+export OUTPUT_DIR=$SCRATCH/outputs/lfm2-700m-sft-$SLURM_JOB_ID
 
 # Load HF token
 if [[ -f "/project/6014832/ermia/HF-TRL/.env" ]]; then
@@ -73,59 +67,53 @@ mkdir -p $OUTPUT_DIR
 echo ""
 echo "Configuration:"
 echo "  Model: $MODEL_NAME"
-echo "  Dataset: $DATASET_NAME (500K samples, streaming)"
+echo "  Dataset: $DATASET_NAME"
 echo "  Hub Model ID: $HUB_MODEL_ID"
-echo "  Reward Type: $REWARD_TYPE"
 echo "  Batch Size: $BATCH_SIZE"
 echo "  Gradient Accumulation: $GRAD_ACCUM"
 echo "  Effective Batch Size: $((BATCH_SIZE * GRAD_ACCUM))"
-echo "  Num Generations: $NUM_GENERATIONS"
-echo "  Learning Rate: $LEARNING_RATE"
-echo "  Max Samples: $MAX_SAMPLES"
-echo "  Seed: $SEED"
 echo "  LoRA Rank: $LORA_R"
 echo "  Output Dir: $OUTPUT_DIR"
 echo ""
 
 # =============================================================================
-# Phase 1: GRPO Training
+# Phase 1: Training
 # =============================================================================
 echo "=========================================="
-echo "Phase 1: GRPO Training"
+echo "Phase 1: SFT Training"
 echo "=========================================="
 
-python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_grpo.py \
+python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_sft.py \
     --model_name_or_path $MODEL_NAME \
     --dataset_name $DATASET_NAME \
-    --dataset_split "train" \
-    --streaming \
-    --max_samples $MAX_SAMPLES \
-    --seed $SEED \
+    --dataset_split "train_sft" \
     --output_dir $OUTPUT_DIR \
     --num_train_epochs $NUM_EPOCHS \
     --per_device_train_batch_size $BATCH_SIZE \
+    --per_device_eval_batch_size $BATCH_SIZE \
     --gradient_accumulation_steps $GRAD_ACCUM \
     --learning_rate $LEARNING_RATE \
-    --max_completion_length $MAX_COMPLETION_LENGTH \
-    --max_prompt_length $MAX_PROMPT_LENGTH \
-    --num_generations $NUM_GENERATIONS \
-    --reward_type $REWARD_TYPE \
+    --max_length $MAX_SEQ_LENGTH \
+    --use_4bit \
     --bf16 \
     --gradient_checkpointing \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \
     --lora_dropout 0.05 \
+    --test_size 0.05 \
+    --eval_strategy steps \
+    --eval_steps 200 \
     --save_strategy steps \
-    --save_steps 500 \
+    --save_steps 200 \
     --save_total_limit 3 \
     --logging_steps 10 \
     --push_to_hub \
     --hub_model_id $HUB_MODEL_ID \
     --hub_strategy end \
     --report_to trackio \
-    --project "grpo-openmath2" \
-    --run_name "qwen2.5-14b-grpo-$SLURM_JOB_ID" \
-    --use_4bit
+    --trackio_dir $OUTPUT_DIR/trackio \
+    --project "lfm2-sft-ultrachat" \
+    --run_name "lfm2-700m-sft-$SLURM_JOB_ID"
 
 TRAIN_EXIT_CODE=$?
 
@@ -145,16 +133,16 @@ echo "Phase 2: Generating Model Card"
 echo "=========================================="
 
 python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/generate_model_card.py \
-    --model_name "Qwen2.5-14B-Instruct-GRPO-OpenMath2" \
+    --model_name "LFM2-700M-SFT-UltraChat" \
     --base_model "$MODEL_NAME" \
     --dataset "$DATASET_NAME" \
-    --training_method GRPO \
+    --training_method SFT \
     --author ermiaazarkhalili \
-    --license apache-2.0 \
+    --license other \
     --learning_rate $LEARNING_RATE \
     --batch_size $BATCH_SIZE \
     --epochs $NUM_EPOCHS \
-    --max_completion_length $MAX_COMPLETION_LENGTH \
+    --max_length $MAX_SEQ_LENGTH \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \
     --hardware "NVIDIA H100 40GB MIG" \
@@ -173,11 +161,73 @@ print('Model card uploaded to $HUB_MODEL_ID')
 "
 
 # =============================================================================
-# Phase 3: GGUF Conversion
+# Phase 3: Evaluation (MMLU and IFEval)
 # =============================================================================
 echo ""
 echo "=========================================="
-echo "Phase 3: GGUF Conversion (Q4_K_M)"
+echo "Phase 3: Evaluation (MMLU, IFEval)"
+echo "=========================================="
+
+# Install lm-eval if needed
+pip install -q lm-eval
+
+# Run evaluation
+python -c "
+import subprocess
+import json
+
+model_id = '$HUB_MODEL_ID'
+output_dir = '$OUTPUT_DIR/eval_results'
+
+# Run lm-eval on MMLU and IFEval (instruction-following)
+cmd = [
+    'lm_eval',
+    '--model', 'hf',
+    '--model_args', f'pretrained={model_id},trust_remote_code=True',
+    '--tasks', 'mmlu,ifeval',
+    '--batch_size', 'auto',
+    '--output_path', output_dir,
+    '--log_samples'
+]
+
+print(f'Running: {\" \".join(cmd)}')
+result = subprocess.run(cmd, capture_output=True, text=True)
+print(result.stdout)
+if result.returncode != 0:
+    print(f'Warning: Evaluation had issues: {result.stderr}')
+"
+
+# Log results to trackio
+python -c "
+import json
+import os
+try:
+    import trackio
+    trackio.init(project='lfm2-sft-ultrachat', name='eval-$SLURM_JOB_ID')
+
+    # Try to load and log results
+    eval_dir = '$OUTPUT_DIR/eval_results'
+    for f in os.listdir(eval_dir) if os.path.exists(eval_dir) else []:
+        if f.endswith('.json'):
+            with open(os.path.join(eval_dir, f)) as fp:
+                results = json.load(fp)
+                if 'results' in results:
+                    for task, metrics in results['results'].items():
+                        for metric, value in metrics.items():
+                            if isinstance(value, (int, float)):
+                                trackio.log({f'{task}/{metric}': value})
+    trackio.finish()
+    print('Evaluation results logged to trackio')
+except Exception as e:
+    print(f'Could not log to trackio: {e}')
+"
+
+# =============================================================================
+# Phase 4: GGUF Conversion
+# =============================================================================
+echo ""
+echo "=========================================="
+echo "Phase 4: GGUF Conversion (Q4_K_M)"
 echo "=========================================="
 
 python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/convert_gguf.py \
@@ -208,6 +258,8 @@ echo "Outputs:"
 echo "  Training Output: $OUTPUT_DIR"
 echo "  Model on Hub: https://huggingface.co/$HUB_MODEL_ID"
 echo "  GGUF on Hub: https://huggingface.co/$GGUF_REPO_ID"
+echo ""
+echo "Evaluation Results: $OUTPUT_DIR/eval_results"
 echo ""
 echo "To use with Ollama:"
 echo "  ollama pull hf.co/$GGUF_REPO_ID:Q4_K_M"

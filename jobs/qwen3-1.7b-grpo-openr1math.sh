@@ -20,7 +20,7 @@ HUB_MODEL_ID="ermiaazarkhalili/Qwen3-1.7B-GRPO-OpenR1Math"
 GGUF_REPO_ID="ermiaazarkhalili/Qwen3-1.7B-GRPO-OpenR1Math-GGUF"
 
 BATCH_SIZE=1
-GRAD_ACCUM=16
+GRAD_ACCUM=4
 LEARNING_RATE=1e-6
 NUM_EPOCHS=1
 MAX_COMPLETION_LENGTH=512
@@ -45,19 +45,18 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --model_name_or_path $MODEL_NAME --dataset_name $DATASET_NAME --dataset_split "train" \
     --output_dir $OUTPUT_DIR --num_train_epochs $NUM_EPOCHS \
     --per_device_train_batch_size $BATCH_SIZE --gradient_accumulation_steps $GRAD_ACCUM \
-    --learning_rate $LEARNING_RATE --max_length $MAX_COMPLETION_LENGTH --max_prompt_length $MAX_PROMPT_LENGTH \
+    --learning_rate $LEARNING_RATE --max_completion_length $MAX_COMPLETION_LENGTH --max_prompt_length $MAX_PROMPT_LENGTH \
     --num_generations $NUM_GENERATIONS --reward_type $REWARD_TYPE \
     --bf16 --gradient_checkpointing --lora_r $LORA_R --lora_alpha $LORA_ALPHA --lora_dropout 0.05 \
     --save_strategy steps --save_steps 500 --save_total_limit 3 --logging_steps 10 \
     --push_to_hub --hub_model_id $HUB_MODEL_ID --hub_strategy end \
-    --report_to trackio --trackio_dir $OUTPUT_DIR/trackio --project "grpo-openr1math" --run_name "qwen3-1.7b-grpo-$SLURM_JOB_ID"
 
 [[ $? -ne 0 ]] && exit 1
 
 python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/generate_model_card.py \
     --model_name "Qwen3-1.7B-GRPO-OpenR1Math" --base_model "$MODEL_NAME" --dataset "$DATASET_NAME" \
     --training_method GRPO --author ermiaazarkhalili --license apache-2.0 \
-    --learning_rate $LEARNING_RATE --batch_size $BATCH_SIZE --epochs $NUM_EPOCHS --max_length $MAX_COMPLETION_LENGTH \
+    --learning_rate $LEARNING_RATE --batch_size $BATCH_SIZE --epochs $NUM_EPOCHS --max_completion_length $MAX_COMPLETION_LENGTH \
     --lora_r $LORA_R --lora_alpha $LORA_ALPHA --hardware "NVIDIA H100 40GB MIG" --output_dir $OUTPUT_DIR/model_card
 
 python -c "from huggingface_hub import HfApi; HfApi().upload_file(path_or_fileobj='$OUTPUT_DIR/model_card/README.md', path_in_repo='README.md', repo_id='$HUB_MODEL_ID')"

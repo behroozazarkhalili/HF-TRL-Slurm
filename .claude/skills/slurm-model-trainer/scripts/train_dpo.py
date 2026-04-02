@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+# /// script
+# dependencies = [
+#     "trl>=0.26.2",
+#     "peft>=0.18.0",
+#     "transformers>=4.57.3",
+#     "accelerate>=1.12.0",
+#     "datasets>=4.4.2",
+#     "bitsandbytes>=0.49.0",
+#     "trackio>=0.13.1",
+# ]
+# ///
 """
 TRL DPO (Direct Preference Optimization) Training Script
 =========================================================
@@ -141,8 +152,6 @@ def parse_args():
                         help="Project name for tracking")
     parser.add_argument("--trackio_space_id", type=str, default=None,
                         help="HF Space ID for trackio (e.g., 'username/space'). If not set, logs locally.")
-    parser.add_argument("--trackio_dir", type=str, default=None,
-                        help="Local directory for trackio logs. If set, overrides trackio_space_id.")
 
     # Performance arguments
     parser.add_argument("--bf16", action="store_true",
@@ -291,7 +300,7 @@ def main():
             }
         }
         # Use space_id if explicitly set, otherwise log locally (trackio default)
-        if hasattr(args, 'trackio_space_id') and args.trackio_space_id:
+        if args.trackio_space_id:
             trackio_kwargs["space_id"] = args.trackio_space_id
             print(f"Trackio logging to: HF Space {args.trackio_space_id}")
         else:

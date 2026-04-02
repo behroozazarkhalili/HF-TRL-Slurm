@@ -1,17 +1,17 @@
 #!/bin/bash
 # =============================================================================
-# Qwen2.5-14B-Instruct GRPO Training on nvidia/OpenMathInstruct-2
+# SmolLM2-360M-Instruct GRPO Training on AI-MO/NuminaMath-CoT
 # Full Pipeline: Train → Model Card → GGUF Conversion → HF Upload
-# Dataset: nvidia/OpenMathInstruct-2 (500K samples, streaming mode)
+# Dataset: AI-MO/NuminaMath-CoT (100K samples, streaming mode)
 # =============================================================================
 
-#SBATCH --job-name=qwen2.5-14b-grpo-openmath2
+#SBATCH --job-name=smollm2-360m-grpo-numina
 #SBATCH --account=def-maxwl_gpu
 #SBATCH --time=7-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --mem=32G
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
 #SBATCH --partition=gpubase_bygpu_b5
 #SBATCH --output=logs/%x-%j.out
@@ -21,15 +21,21 @@
 # =============================================================================
 # Configuration
 # =============================================================================
-MODEL_NAME="Qwen/Qwen2.5-14B-Instruct"
-DATASET_NAME="nvidia/OpenMathInstruct-2"
-HUB_MODEL_ID="ermiaazarkhalili/Qwen2.5-14B-Instruct-GRPO-OpenMath2"
-GGUF_REPO_ID="ermiaazarkhalili/Qwen2.5-14B-Instruct-GRPO-OpenMath2-GGUF"
+MODEL_NAME="HuggingFaceTB/SmolLM2-360M-Instruct"
+DATASET_NAME="AI-MO/NuminaMath-CoT"
+
+# Sample size configuration
+MAX_SAMPLES=100000
+SAMPLE_SIZE_LABEL="100K"  # Human-readable format for model naming
+
+# Model naming with sample size
+HUB_MODEL_ID="ermiaazarkhalili/SmolLM2-360M-Instruct-GRPO-NuminaMath-${SAMPLE_SIZE_LABEL}"
+GGUF_REPO_ID="ermiaazarkhalili/SmolLM2-360M-Instruct-GRPO-NuminaMath-${SAMPLE_SIZE_LABEL}-GGUF"
 
 # GRPO Training parameters
 BATCH_SIZE=1
 GRAD_ACCUM=4
-LEARNING_RATE=5e-7
+LEARNING_RATE=1e-6
 NUM_EPOCHS=1
 MAX_COMPLETION_LENGTH=2048
 MAX_PROMPT_LENGTH=512
@@ -37,7 +43,6 @@ NUM_GENERATIONS=2
 REWARD_TYPE="combined"
 LORA_R=16
 LORA_ALPHA=32
-MAX_SAMPLES=50000
 SEED=42
 
 # =============================================================================
@@ -61,7 +66,7 @@ source /scratch/ermia/venvs/hf_env/bin/activate
 export SCRATCH=${SCRATCH:-/scratch/$USER}
 export HF_HOME=$SCRATCH/.cache/huggingface
 export TRANSFORMERS_CACHE=$HF_HOME/hub
-export OUTPUT_DIR=$SCRATCH/outputs/qwen2.5-14b-grpo-$SLURM_JOB_ID
+export OUTPUT_DIR=$SCRATCH/outputs/smollm2-360m-grpo-numina-$SLURM_JOB_ID
 
 # Load HF token
 if [[ -f "/project/6014832/ermia/HF-TRL/.env" ]]; then
@@ -73,7 +78,7 @@ mkdir -p $OUTPUT_DIR
 echo ""
 echo "Configuration:"
 echo "  Model: $MODEL_NAME"
-echo "  Dataset: $DATASET_NAME (500K samples, streaming)"
+echo "  Dataset: $DATASET_NAME (100K samples, streaming)"
 echo "  Hub Model ID: $HUB_MODEL_ID"
 echo "  Reward Type: $REWARD_TYPE"
 echo "  Batch Size: $BATCH_SIZE"
@@ -123,9 +128,8 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --hub_model_id $HUB_MODEL_ID \
     --hub_strategy end \
     --report_to trackio \
-    --project "grpo-openmath2" \
-    --run_name "qwen2.5-14b-grpo-$SLURM_JOB_ID" \
-    --use_4bit
+    --project "smollm2-grpo-numina" \
+    --run_name "smollm2-360m-grpo-numina-$SLURM_JOB_ID"
 
 TRAIN_EXIT_CODE=$?
 
@@ -145,7 +149,7 @@ echo "Phase 2: Generating Model Card"
 echo "=========================================="
 
 python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/generate_model_card.py \
-    --model_name "Qwen2.5-14B-Instruct-GRPO-OpenMath2" \
+    --model_name "SmolLM2-360M-Instruct-GRPO-NuminaMath" \
     --base_model "$MODEL_NAME" \
     --dataset "$DATASET_NAME" \
     --training_method GRPO \
@@ -157,7 +161,7 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --max_completion_length $MAX_COMPLETION_LENGTH \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \
-    --hardware "NVIDIA H100 40GB MIG" \
+    --hardware "NVIDIA H100 20GB MIG" \
     --output_dir $OUTPUT_DIR/model_card
 
 # Push model card to Hub

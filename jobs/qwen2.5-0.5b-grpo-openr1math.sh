@@ -27,7 +27,7 @@ GGUF_REPO_ID="ermiaazarkhalili/Qwen2.5-0.5B-Instruct-GRPO-OpenR1Math-GGUF"
 
 # GRPO Training parameters (Small model config - 10GB MIG)
 BATCH_SIZE=2
-GRAD_ACCUM=8
+GRAD_ACCUM=4
 LEARNING_RATE=1e-6
 NUM_EPOCHS=1
 MAX_COMPLETION_LENGTH=512
@@ -98,7 +98,7 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --per_device_train_batch_size $BATCH_SIZE \
     --gradient_accumulation_steps $GRAD_ACCUM \
     --learning_rate $LEARNING_RATE \
-    --max_length $MAX_COMPLETION_LENGTH \
+    --max_completion_length $MAX_COMPLETION_LENGTH \
     --max_prompt_length $MAX_PROMPT_LENGTH \
     --num_generations $NUM_GENERATIONS \
     --reward_type $REWARD_TYPE \
@@ -115,7 +115,6 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --hub_model_id $HUB_MODEL_ID \
     --hub_strategy end \
     --report_to trackio \
-    --trackio_dir $OUTPUT_DIR/trackio \
     --project "grpo-openr1math" \
     --run_name "qwen2.5-0.5b-grpo-$SLURM_JOB_ID"
 
@@ -146,7 +145,7 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --learning_rate $LEARNING_RATE \
     --batch_size $BATCH_SIZE \
     --epochs $NUM_EPOCHS \
-    --max_length $MAX_COMPLETION_LENGTH \
+    --max_completion_length $MAX_COMPLETION_LENGTH \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \
     --hardware "NVIDIA H100 10GB MIG" \

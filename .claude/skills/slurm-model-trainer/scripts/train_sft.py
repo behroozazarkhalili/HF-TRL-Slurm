@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+# /// script
+# dependencies = [
+#     "trl>=0.26.2",
+#     "peft>=0.18.0",
+#     "transformers>=4.57.3",
+#     "accelerate>=1.12.0",
+#     "datasets>=4.4.2",
+#     "bitsandbytes>=0.49.0",
+#     "trackio>=0.13.1",
+# ]
+# ///
 """
 TRL SFT (Supervised Fine-Tuning) Training Script
 ================================================
@@ -57,6 +68,8 @@ def parse_args():
                         help="Dataset split to use")
     parser.add_argument("--max_samples", type=int, default=None,
                         help="Maximum number of samples to use")
+    parser.add_argument("--streaming", action="store_true",
+                        help="Use streaming mode for large datasets")
     parser.add_argument("--test_size", type=float, default=0.1,
                         help="Fraction of data to use for evaluation")
 
@@ -132,8 +145,6 @@ def parse_args():
                         help="Project name for tracking")
     parser.add_argument("--trackio_space_id", type=str, default=None,
                         help="HF Space ID for trackio (e.g., 'username/space'). If not set, logs locally.")
-    parser.add_argument("--trackio_dir", type=str, default=None,
-                        help="Local directory for trackio logs. If set, overrides trackio_space_id.")
 
     # Resume training
     parser.add_argument("--resume_from_checkpoint", type=str, default=None,
@@ -195,22 +206,71 @@ def load_model_and_tokenizer(args):
     return model, tokenizer
 
 
+def is_sharegpt_format(dataset) -> bool:
+    """Detect if dataset uses ShareGPT format.
+
+    ShareGPT format has:
+    - 'conversations' column (not 'messages')
+    - Each turn has 'from' and 'value' keys (not 'role' and 'content')
+
+    Returns True if conversion is needed, False otherwise.
+    """
+    if 'conversations' not in dataset.column_names:
+        return False
+
+    # Check first example to verify format
+    try:
+        sample = dataset[0]['conversations']
+        if not sample or len(sample) == 0:
+            return False
+
+        first_turn = sample[0]
+        # ShareGPT uses 'from'/'value', TRL Messages uses 'role'/'content'
+        return 'from' in first_turn and 'value' in first_turn
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def convert_sharegpt_to_messages(example):
+    """Convert ShareGPT format to TRL Messages format.
+
+    Mapping:
+    - 'from' → 'role'
+    - 'value' → 'content'
+    - 'human' → 'user'
+    - 'gpt' → 'assistant'
+    - 'system' → 'system'
+    """
+    role_map = {"human": "user", "gpt": "assistant", "system": "system"}
+    messages = []
+    for turn in example["conversations"]:
+        role = role_map.get(turn["from"], turn["from"])
+        messages.append({"role": role, "content": turn["value"]})
+    return {"messages": messages}
+
+
 def detect_dataset_format(dataset):
     """
     Detect dataset format for SFT training.
 
     Returns: (format_type, columns_to_keep)
     - 'conversational': Dataset has 'messages' column (chat format)
+    - 'sharegpt': Dataset has 'conversations' with ShareGPT format (needs conversion)
     - 'prompt_completion': Dataset has 'prompt' and 'completion' columns
     - 'text': Dataset has 'text' column (pre-formatted)
     - 'unknown': Unknown format
     """
     columns = dataset.column_names
 
-    # Check for conversational format (messages/conversations)
+    # Check for conversational format (messages first - already TRL format)
     if 'messages' in columns:
         return 'conversational', ['messages']
+
+    # Check for ShareGPT format (conversations column with from/value keys)
     if 'conversations' in columns:
+        if is_sharegpt_format(dataset):
+            return 'sharegpt', ['conversations']
+        # If conversations but not ShareGPT format, treat as conversational
         return 'conversational', ['conversations']
 
     # Check for prompt/completion format
@@ -228,13 +288,22 @@ def detect_dataset_format(dataset):
     return 'unknown', columns
 
 
-def prepare_dataset_for_sft(dataset, format_type, columns_to_keep):
+def prepare_dataset_for_sft(dataset, format_type, columns_to_keep, num_proc: Optional[int] = None):
     """
     Prepare dataset for SFT training based on detected format.
+
+    Args:
+        dataset: The loaded dataset.
+        format_type: Detected format ('conversational', 'sharegpt', etc.).
+        columns_to_keep: List of columns to retain.
+        num_proc: Number of processes for parallel dataset operations.
 
     For conversational datasets:
     - Keep only the messages column to avoid confusing TRL
     - TRL will automatically apply the tokenizer's chat_template
+
+    For ShareGPT datasets:
+    - Automatically convert from/value to role/content format
 
     For instruction/output datasets:
     - Convert to prompt/completion format
@@ -246,6 +315,22 @@ def prepare_dataset_for_sft(dataset, format_type, columns_to_keep):
             dataset = dataset.remove_columns(columns_to_remove)
 
         print(f"  Prepared conversational dataset with columns: {dataset.column_names}")
+        return dataset
+
+    elif format_type == 'sharegpt':
+        # Automatically convert ShareGPT format to Messages format
+        print(f"  Converting ShareGPT format to Messages format...")
+        dataset = dataset.map(
+            convert_sharegpt_to_messages,
+            remove_columns=['conversations'],
+            num_proc=num_proc,
+            desc="Converting ShareGPT to Messages"
+        )
+        # Remove any other columns
+        columns_to_remove = [c for c in dataset.column_names if c != 'messages']
+        if columns_to_remove:
+            dataset = dataset.remove_columns(columns_to_remove)
+        print(f"  Conversion complete. Columns: {dataset.column_names}")
         return dataset
 
     elif format_type == 'instruction_output':
@@ -262,7 +347,12 @@ def prepare_dataset_for_sft(dataset, format_type, columns_to_keep):
 
             return {'prompt': prompt, 'completion': output}
 
-        dataset = dataset.map(convert_to_prompt_completion, remove_columns=dataset.column_names)
+        dataset = dataset.map(
+            convert_to_prompt_completion,
+            remove_columns=dataset.column_names,
+            num_proc=num_proc,
+            desc="Converting to prompt/completion"
+        )
         print(f"  Converted instruction/output to prompt/completion format")
         return dataset
 
@@ -284,23 +374,50 @@ def load_and_prepare_dataset(args):
     """Load dataset and create train/eval splits with intelligent format detection."""
     print(f"Loading dataset: {args.dataset_name}")
 
-    dataset = load_dataset(
-        args.dataset_name,
-        args.dataset_config,
-        split=args.dataset_split,
-    )
+    # Streaming mode for large datasets
+    if args.streaming:
+        print(f"  Using streaming mode (max_samples={args.max_samples})")
+        dataset = load_dataset(
+            args.dataset_name,
+            args.dataset_config,
+            split=args.dataset_split,
+            streaming=True,
+        )
+
+        # For streaming, we take first max_samples and materialize
+        if args.max_samples:
+            dataset = dataset.take(args.max_samples)
+        else:
+            # Must have max_samples in streaming mode
+            raise ValueError("--streaming requires --max_samples to be set")
+
+        # Materialize the streaming dataset into memory
+        from datasets import Dataset
+        samples = list(dataset)
+        dataset = Dataset.from_list(samples)
+        print(f"  Materialized {len(dataset)} samples from stream")
+    else:
+        dataset = load_dataset(
+            args.dataset_name,
+            args.dataset_config,
+            split=args.dataset_split,
+        )
+
+        # Limit samples if specified
+        if args.max_samples is not None:
+            dataset = dataset.select(range(min(args.max_samples, len(dataset))))
+
+    # Get num_proc for parallel processing (default: 8 CPUs for efficient dataset conversion)
+    num_proc = args.dataset_num_proc if args.dataset_num_proc else int(os.environ.get("SLURM_CPUS_PER_TASK", 8))
+    print(f"  Using {num_proc} processes for dataset operations")
 
     # Detect dataset format
     format_type, columns_to_keep = detect_dataset_format(dataset)
     print(f"  Detected format: {format_type}")
     print(f"  Original columns: {dataset.column_names}")
 
-    # Prepare dataset for SFT
-    dataset = prepare_dataset_for_sft(dataset, format_type, columns_to_keep)
-
-    # Limit samples if specified
-    if args.max_samples is not None:
-        dataset = dataset.select(range(min(args.max_samples, len(dataset))))
+    # Prepare dataset for SFT (with parallel processing)
+    dataset = prepare_dataset_for_sft(dataset, format_type, columns_to_keep, num_proc=num_proc)
 
     # Create train/eval split
     if args.test_size > 0 and args.eval_strategy != "no":
@@ -351,7 +468,7 @@ def main():
             }
         }
         # Use space_id if explicitly set, otherwise log locally (trackio default)
-        if hasattr(args, 'trackio_space_id') and args.trackio_space_id:
+        if args.trackio_space_id:
             trackio_kwargs["space_id"] = args.trackio_space_id
             print(f"Trackio logging to: HF Space {args.trackio_space_id}")
         else:
@@ -369,7 +486,7 @@ def main():
     print(f"LoRA config: r={args.lora_r}, alpha={args.lora_alpha}")
 
     # Dataset preprocessing config
-    num_proc = args.dataset_num_proc if args.dataset_num_proc else int(os.environ.get("SLURM_CPUS_PER_TASK", 4))
+    num_proc = args.dataset_num_proc if args.dataset_num_proc else int(os.environ.get("SLURM_CPUS_PER_TASK", 8))
     print(f"Dataset preprocessing: using {num_proc} processes")
 
     # Training arguments

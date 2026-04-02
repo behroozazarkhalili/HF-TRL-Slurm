@@ -1,746 +1,148 @@
 """
-Generate SBATCH job scripts using Jinja2 templates.
+Job Generator Facade for SLURM job script generation.
 
-This module handles the generation of complete SLURM job scripts
-for SFT, GRPO, and DPO training pipelines.
+This module provides a high-level interface for generating complete
+SLURM job scripts by composing specialized builder classes.
+
+The JobGenerator class follows the Facade pattern, delegating
+the actual script generation to four specialized builders:
+- SBatchHeaderBuilder: SLURM directives
+- EnvironmentBuilder: Module loads, virtualenv, paths
+- TrainingBlockBuilder: Training script and arguments
+- PostProcessingBuilder: Model card, GGUF, summary
 """
 
-from pathlib import Path
-from typing import Optional
-from jinja2 import Environment, FileSystemLoader, TemplateNotFound
+from typing import Union
+
+from .config import JobConfig
+from .builders import (
+    SBatchHeaderBuilder,
+    EnvironmentBuilder,
+    TrainingBlockBuilder,
+    PostProcessingBuilder,
+)
 
 
 class JobGenerator:
-    """Generate SLURM job scripts from Jinja2 templates."""
+    """Facade for generating complete SLURM job scripts.
 
-    def __init__(self, template_dir: Optional[Path] = None):
-        """Initialize the job generator.
+    This class composes specialized builder classes to generate
+    a complete SLURM job script. It supports both the new JobConfig
+    dataclass and the legacy dict-based configuration.
 
-        Args:
-            template_dir: Path to templates directory. Defaults to ../templates
-        """
-        if template_dir is None:
-            template_dir = Path(__file__).parent.parent / "templates"
-
-        self.template_dir = template_dir
-        self.env = Environment(
-            loader=FileSystemLoader(template_dir),
-            trim_blocks=True,
-            lstrip_blocks=True,
+    Example:
+        # Using JobConfig (recommended)
+        config = JobConfig(
+            model_id="Qwen/Qwen2.5-0.5B",
+            dataset_id="trl-lib/Capybara",
+            method="sft",
+            job_name="qwen-sft-capybara",
+            hub_model_id="username/Qwen2.5-0.5B-SFT",
+            gguf_repo_id="username/Qwen2.5-0.5B-SFT-GGUF",
         )
+        generator = JobGenerator()
+        script = generator.generate(config)
 
-    def generate(
-        self,
-        model_id: str,
-        dataset_id: str,
-        method: str,
-        config: dict,
-    ) -> str:
-        """Generate a complete SBATCH job script.
+        # Legacy dict support
+        config_dict = {...}
+        script = generator.generate_from_dict(
+            model_id="Qwen/Qwen2.5-0.5B",
+            dataset_id="trl-lib/Capybara",
+            method="sft",
+            config=config_dict
+        )
+    """
+
+    def generate(self, config: JobConfig) -> str:
+        """Generate a complete SLURM job script from JobConfig.
 
         Args:
-            model_id: HuggingFace model ID
-            dataset_id: HuggingFace dataset ID
-            method: Training method (sft, grpo, dpo)
-            config: Configuration dictionary from smart_defaults
+            config: JobConfig object with all job parameters.
 
         Returns:
-            Complete SBATCH job script as a string
+            Complete SLURM job script as a string.
         """
-        template_name = f"{method}_pipeline.sh.j2"
+        # Initialize all builders with the config
+        header_builder = SBatchHeaderBuilder(config)
+        env_builder = EnvironmentBuilder(config)
+        training_builder = TrainingBlockBuilder(config)
+        post_builder = PostProcessingBuilder(config)
 
-        try:
-            template = self.env.get_template(template_name)
-        except TemplateNotFound:
-            # Fall back to inline template generation
-            return self._generate_inline(model_id, dataset_id, method, config)
+        # Build all sections
+        sections = [
+            header_builder.build(),
+            env_builder.build(),
+            training_builder.build(),
+            post_builder.build(),
+        ]
 
-        return template.render(
-            model_id=model_id,
-            dataset_id=dataset_id,
-            method=method,
-            config=config,
-        )
+        return "\n".join(sections)
 
-    def _generate_inline(
+    def generate_from_dict(
         self,
         model_id: str,
         dataset_id: str,
         method: str,
         config: dict,
     ) -> str:
-        """Generate job script without external template.
+        """Generate a SLURM job script from legacy dict configuration.
 
-        This is a fallback when Jinja2 templates are not available.
+        This method provides backward compatibility with the old
+        dict-based configuration system.
+
+        Args:
+            model_id: HuggingFace model ID.
+            dataset_id: HuggingFace dataset ID.
+            method: Training method (sft, grpo, dpo).
+            config: Legacy configuration dictionary.
+
+        Returns:
+            Complete SLURM job script as a string.
         """
-        if method == 'sft':
-            return self._generate_sft_script(model_id, dataset_id, config)
-        elif method == 'grpo':
-            return self._generate_grpo_script(model_id, dataset_id, config)
-        elif method == 'dpo':
-            return self._generate_dpo_script(model_id, dataset_id, config)
-        else:
-            raise ValueError(f"Unknown method: {method}")
-
-    def _generate_sft_script(self, model_id: str, dataset_id: str, config: dict) -> str:
-        """Generate SFT training script."""
-        use_4bit = "--use_4bit" if config.get('requires_4bit', False) else ""
-        streaming_args = ""
-        if config.get('streaming'):
-            streaming_args = f"--streaming --max_samples {config.get('max_samples', 500000)}"
-
-        return f'''#!/bin/bash
-# =============================================================================
-# {model_id.split('/')[-1]} SFT Training on {dataset_id.split('/')[-1]}
-# Auto-generated by SLURM Job Generator
-# =============================================================================
-
-#SBATCH --job-name={config['job_name']}
-#SBATCH --account={config['account']}
-#SBATCH --time={config['time_limit']}
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task={config['cpus']}
-#SBATCH --mem={config['memory']}
-#SBATCH --gres={config['gres']}
-#SBATCH --partition={config['partition']}
-#SBATCH --output=logs/%x-%j.out
-#SBATCH --error=logs/%x-%j.err
-#SBATCH --mail-type=BEGIN,END,FAIL
-
-# =============================================================================
-# Configuration
-# =============================================================================
-MODEL_NAME="{model_id}"
-DATASET_NAME="{dataset_id}"
-HUB_MODEL_ID="{config['hub_model_id']}"
-GGUF_REPO_ID="{config['gguf_repo_id']}"
-
-# Training parameters ({config['size_category']} model config)
-BATCH_SIZE={config['batch_size']}
-GRAD_ACCUM={config['grad_accum']}
-LEARNING_RATE={config['lr']}
-NUM_EPOCHS={config.get('num_train_epochs', 1)}
-MAX_SEQ_LENGTH={config['max_length']}
-LORA_R={config['lora_r']}
-LORA_ALPHA={config['lora_alpha']}
-
-# =============================================================================
-# Environment Setup
-# =============================================================================
-echo "=========================================="
-echo "Job: $SLURM_JOB_NAME (ID: $SLURM_JOB_ID)"
-echo "Node: $SLURMD_NODENAME"
-echo "Start time: $(date)"
-echo "=========================================="
-
-mkdir -p logs
-
-# Load modules
-module load gcc arrow python/3.11.5
-
-# Activate virtual environment
-source /scratch/ermia/venvs/hf_env/bin/activate
-
-# Set environment variables
-export SCRATCH=${{SCRATCH:-/scratch/$USER}}
-export HF_HOME=$SCRATCH/.cache/huggingface
-export TRANSFORMERS_CACHE=$HF_HOME/hub
-export OUTPUT_DIR=$SCRATCH/outputs/{config['job_name']}-$SLURM_JOB_ID
-
-# Load HF token
-if [[ -f "/project/6014832/ermia/HF-TRL/.env" ]]; then
-    export $(grep -v '^#' /project/6014832/ermia/HF-TRL/.env | xargs)
-fi
-
-mkdir -p $OUTPUT_DIR
-
-echo ""
-echo "Configuration:"
-echo "  Model: $MODEL_NAME"
-echo "  Dataset: $DATASET_NAME"
-echo "  Hub Model ID: $HUB_MODEL_ID"
-echo "  Batch Size: $BATCH_SIZE"
-echo "  Gradient Accumulation: $GRAD_ACCUM"
-echo "  Effective Batch Size: $((BATCH_SIZE * GRAD_ACCUM))"
-echo "  LoRA Rank: $LORA_R"
-echo "  Output Dir: $OUTPUT_DIR"
-echo ""
-
-# =============================================================================
-# Phase 1: Training
-# =============================================================================
-echo "=========================================="
-echo "Phase 1: SFT Training"
-echo "=========================================="
-
-python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_sft.py \\
-    --model_name_or_path $MODEL_NAME \\
-    --dataset_name $DATASET_NAME \\
-    --output_dir $OUTPUT_DIR \\
-    --num_train_epochs $NUM_EPOCHS \\
-    --per_device_train_batch_size $BATCH_SIZE \\
-    --per_device_eval_batch_size $BATCH_SIZE \\
-    --gradient_accumulation_steps $GRAD_ACCUM \\
-    --learning_rate $LEARNING_RATE \\
-    --max_length $MAX_SEQ_LENGTH \\
-    {use_4bit} \\
-    --bf16 \\
-    --gradient_checkpointing \\
-    --lora_r $LORA_R \\
-    --lora_alpha $LORA_ALPHA \\
-    --lora_dropout {config.get('lora_dropout', 0.0)} \\
-    --save_strategy steps \\
-    --save_steps {config.get('save_steps', 500)} \\
-    --save_total_limit {config.get('save_total_limit', 3)} \\
-    --logging_steps {config.get('logging_steps', 10)} \\
-    --push_to_hub \\
-    --hub_model_id $HUB_MODEL_ID \\
-    --hub_strategy {config.get('hub_strategy', 'end')} \\
-    --report_to {config.get('report_to', 'trackio')} \\
-    --trackio_dir $OUTPUT_DIR/trackio \\
-    --project "{config['job_name'].rsplit('-', 1)[0]}" \\
-    --run_name "{config['job_name']}-$SLURM_JOB_ID" {streaming_args}
-
-TRAIN_EXIT_CODE=$?
-
-if [[ $TRAIN_EXIT_CODE -ne 0 ]]; then
-    echo "ERROR: Training failed with exit code $TRAIN_EXIT_CODE"
-    exit $TRAIN_EXIT_CODE
-fi
-
-echo "Training completed successfully!"
-
-# =============================================================================
-# Phase 2: Generate Model Card
-# =============================================================================
-echo ""
-echo "=========================================="
-echo "Phase 2: Generating Model Card"
-echo "=========================================="
-
-python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/generate_model_card.py \\
-    --model_name "{config['hub_model_id'].split('/')[-1]}" \\
-    --base_model "$MODEL_NAME" \\
-    --dataset "$DATASET_NAME" \\
-    --training_method SFT \\
-    --author {config['hub_model_id'].split('/')[0]} \\
-    --license cc-by-nc-4.0 \\
-    --learning_rate $LEARNING_RATE \\
-    --batch_size $BATCH_SIZE \\
-    --epochs $NUM_EPOCHS \\
-    --max_length $MAX_SEQ_LENGTH \\
-    --lora_r $LORA_R \\
-    --lora_alpha $LORA_ALPHA \\
-    --hardware "NVIDIA H100 MIG" \\
-    --output_dir $OUTPUT_DIR/model_card
-
-# Push model card to Hub
-python -c "
-from huggingface_hub import HfApi
-api = HfApi()
-api.upload_file(
-    path_or_fileobj='$OUTPUT_DIR/model_card/README.md',
-    path_in_repo='README.md',
-    repo_id='$HUB_MODEL_ID'
-)
-print('Model card uploaded to $HUB_MODEL_ID')
-"
-
-# =============================================================================
-# Phase 3: GGUF Conversion
-# =============================================================================
-echo ""
-echo "=========================================="
-echo "Phase 3: GGUF Conversion (Q4_K_M)"
-echo "=========================================="
-
-python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/convert_gguf.py \\
-    --model $HUB_MODEL_ID \\
-    --base_model $MODEL_NAME \\
-    --output_repo $GGUF_REPO_ID \\
-    --quantizations "Q4_K_M,Q5_K_M,Q8_0" \\
-    --output_dir $OUTPUT_DIR/gguf
-
-GGUF_EXIT_CODE=$?
-
-if [[ $GGUF_EXIT_CODE -ne 0 ]]; then
-    echo "WARNING: GGUF conversion had issues (exit code $GGUF_EXIT_CODE)"
-else
-    echo "GGUF conversion completed successfully!"
-fi
-
-# =============================================================================
-# Summary
-# =============================================================================
-echo ""
-echo "=========================================="
-echo "Pipeline Complete!"
-echo "End time: $(date)"
-echo "=========================================="
-echo ""
-echo "Outputs:"
-echo "  Training Output: $OUTPUT_DIR"
-echo "  Model on Hub: https://huggingface.co/$HUB_MODEL_ID"
-echo "  GGUF on Hub: https://huggingface.co/$GGUF_REPO_ID"
-echo ""
-echo "To use with Ollama:"
-echo "  ollama pull hf.co/$GGUF_REPO_ID:Q4_K_M"
-echo ""
-'''
-
-    def _generate_grpo_script(self, model_id: str, dataset_id: str, config: dict) -> str:
-        """Generate GRPO training script."""
-        use_4bit = "--use_4bit" if config.get('requires_4bit', False) else ""
-        streaming_args = ""
-        if config.get('streaming'):
-            streaming_args = f"--streaming --max_samples {config.get('max_samples', 500000)}"
-
-        return f'''#!/bin/bash
-# =============================================================================
-# {model_id.split('/')[-1]} GRPO Training on {dataset_id.split('/')[-1]}
-# Auto-generated by SLURM Job Generator
-# =============================================================================
-
-#SBATCH --job-name={config['job_name']}
-#SBATCH --account={config['account']}
-#SBATCH --time={config['time_limit']}
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task={config['cpus']}
-#SBATCH --mem={config['memory']}
-#SBATCH --gres={config['gres']}
-#SBATCH --partition={config['partition']}
-#SBATCH --output=logs/%x-%j.out
-#SBATCH --error=logs/%x-%j.err
-#SBATCH --mail-type=BEGIN,END,FAIL
-
-# =============================================================================
-# Configuration
-# =============================================================================
-MODEL_NAME="{model_id}"
-DATASET_NAME="{dataset_id}"
-HUB_MODEL_ID="{config['hub_model_id']}"
-GGUF_REPO_ID="{config['gguf_repo_id']}"
-
-# Training parameters ({config['size_category']} model config)
-BATCH_SIZE={config['batch_size']}
-GRAD_ACCUM={config['grad_accum']}
-LEARNING_RATE={config['lr']}
-NUM_EPOCHS={config.get('num_train_epochs', 1)}
-MAX_COMPLETION_LENGTH={config['max_length']}
-MAX_PROMPT_LENGTH={config['max_prompt_length']}
-NUM_GENERATIONS={config.get('num_gen', 4)}
-REWARD_TYPE="{config.get('reward_type', 'combined')}"
-LORA_R={config['lora_r']}
-LORA_ALPHA={config['lora_alpha']}
-
-# =============================================================================
-# Environment Setup
-# =============================================================================
-echo "=========================================="
-echo "Job: $SLURM_JOB_NAME (ID: $SLURM_JOB_ID)"
-echo "Node: $SLURMD_NODENAME"
-echo "Start time: $(date)"
-echo "=========================================="
-
-mkdir -p logs
-
-# Load modules
-module load gcc arrow python/3.11.5
-
-# Activate virtual environment
-source /scratch/ermia/venvs/hf_env/bin/activate
-
-# Set environment variables
-export SCRATCH=${{SCRATCH:-/scratch/$USER}}
-export HF_HOME=$SCRATCH/.cache/huggingface
-export TRANSFORMERS_CACHE=$HF_HOME/hub
-export OUTPUT_DIR=$SCRATCH/outputs/{config['job_name']}-$SLURM_JOB_ID
-
-# Load HF token
-if [[ -f "/project/6014832/ermia/HF-TRL/.env" ]]; then
-    export $(grep -v '^#' /project/6014832/ermia/HF-TRL/.env | xargs)
-fi
-
-mkdir -p $OUTPUT_DIR
-
-echo ""
-echo "Configuration:"
-echo "  Model: $MODEL_NAME"
-echo "  Dataset: $DATASET_NAME"
-echo "  Hub Model ID: $HUB_MODEL_ID"
-echo "  Batch Size: $BATCH_SIZE"
-echo "  Gradient Accumulation: $GRAD_ACCUM"
-echo "  Effective Batch Size: $((BATCH_SIZE * GRAD_ACCUM))"
-echo "  Num Generations: $NUM_GENERATIONS"
-echo "  Reward Type: $REWARD_TYPE"
-echo "  LoRA Rank: $LORA_R"
-echo "  Output Dir: $OUTPUT_DIR"
-echo ""
-
-# =============================================================================
-# Phase 1: Training
-# =============================================================================
-echo "=========================================="
-echo "Phase 1: GRPO Training"
-echo "=========================================="
-
-python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_grpo.py \\
-    --model_name_or_path $MODEL_NAME \\
-    --dataset_name $DATASET_NAME \\
-    --output_dir $OUTPUT_DIR \\
-    --num_train_epochs $NUM_EPOCHS \\
-    --per_device_train_batch_size $BATCH_SIZE \\
-    --gradient_accumulation_steps $GRAD_ACCUM \\
-    --learning_rate $LEARNING_RATE \\
-    --max_completion_length $MAX_COMPLETION_LENGTH \\
-    --max_prompt_length $MAX_PROMPT_LENGTH \\
-    --num_generations $NUM_GENERATIONS \\
-    --reward_type $REWARD_TYPE \\
-    {use_4bit} \\
-    --bf16 \\
-    --gradient_checkpointing \\
-    --lora_r $LORA_R \\
-    --lora_alpha $LORA_ALPHA \\
-    --lora_dropout {config.get('lora_dropout', 0.05)} \\
-    --save_strategy steps \\
-    --save_steps {config.get('save_steps', 500)} \\
-    --save_total_limit {config.get('save_total_limit', 3)} \\
-    --logging_steps {config.get('logging_steps', 10)} \\
-    --push_to_hub \\
-    --hub_model_id $HUB_MODEL_ID \\
-    --hub_strategy {config.get('hub_strategy', 'end')} \\
-    --report_to {config.get('report_to', 'trackio')} \\
-    --trackio_dir $OUTPUT_DIR/trackio \\
-    --project "{config['job_name'].rsplit('-', 1)[0]}" \\
-    --run_name "{config['job_name']}-$SLURM_JOB_ID" {streaming_args}
-
-TRAIN_EXIT_CODE=$?
-
-if [[ $TRAIN_EXIT_CODE -ne 0 ]]; then
-    echo "ERROR: Training failed with exit code $TRAIN_EXIT_CODE"
-    exit $TRAIN_EXIT_CODE
-fi
-
-echo "Training completed successfully!"
-
-# =============================================================================
-# Phase 2: Generate Model Card
-# =============================================================================
-echo ""
-echo "=========================================="
-echo "Phase 2: Generating Model Card"
-echo "=========================================="
-
-python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/generate_model_card.py \\
-    --model_name "{config['hub_model_id'].split('/')[-1]}" \\
-    --base_model "$MODEL_NAME" \\
-    --dataset "$DATASET_NAME" \\
-    --training_method GRPO \\
-    --author {config['hub_model_id'].split('/')[0]} \\
-    --license cc-by-nc-4.0 \\
-    --learning_rate $LEARNING_RATE \\
-    --batch_size $BATCH_SIZE \\
-    --epochs $NUM_EPOCHS \\
-    --max_length $MAX_COMPLETION_LENGTH \\
-    --lora_r $LORA_R \\
-    --lora_alpha $LORA_ALPHA \\
-    --hardware "NVIDIA H100 MIG" \\
-    --output_dir $OUTPUT_DIR/model_card
-
-# Push model card to Hub
-python -c "
-from huggingface_hub import HfApi
-api = HfApi()
-api.upload_file(
-    path_or_fileobj='$OUTPUT_DIR/model_card/README.md',
-    path_in_repo='README.md',
-    repo_id='$HUB_MODEL_ID'
-)
-print('Model card uploaded to $HUB_MODEL_ID')
-"
-
-# =============================================================================
-# Phase 3: Evaluation (Math benchmarks)
-# =============================================================================
-echo ""
-echo "=========================================="
-echo "Phase 3: Evaluation (GSM8K, MATH)"
-echo "=========================================="
-
-pip install -q lm-eval
-
-python -c "
-import subprocess
-import json
-
-model_id = '$HUB_MODEL_ID'
-output_dir = '$OUTPUT_DIR/eval_results'
-
-# Run lm-eval on math benchmarks
-cmd = [
-    'lm_eval',
-    '--model', 'hf',
-    '--model_args', f'pretrained={{model_id}},trust_remote_code=True',
-    '--tasks', 'gsm8k,minerva_math',
-    '--batch_size', 'auto',
-    '--output_path', output_dir,
-    '--log_samples'
-]
-
-print(f'Running: {{\" \".join(cmd)}}')
-result = subprocess.run(cmd, capture_output=True, text=True)
-print(result.stdout)
-if result.returncode != 0:
-    print(f'Warning: Evaluation had issues: {{result.stderr}}')
-"
-
-# =============================================================================
-# Phase 4: GGUF Conversion
-# =============================================================================
-echo ""
-echo "=========================================="
-echo "Phase 4: GGUF Conversion (Q4_K_M)"
-echo "=========================================="
-
-python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/convert_gguf.py \\
-    --model $HUB_MODEL_ID \\
-    --base_model $MODEL_NAME \\
-    --output_repo $GGUF_REPO_ID \\
-    --quantizations "Q4_K_M,Q5_K_M,Q8_0" \\
-    --output_dir $OUTPUT_DIR/gguf
-
-GGUF_EXIT_CODE=$?
-
-if [[ $GGUF_EXIT_CODE -ne 0 ]]; then
-    echo "WARNING: GGUF conversion had issues (exit code $GGUF_EXIT_CODE)"
-else
-    echo "GGUF conversion completed successfully!"
-fi
-
-# =============================================================================
-# Summary
-# =============================================================================
-echo ""
-echo "=========================================="
-echo "Pipeline Complete!"
-echo "End time: $(date)"
-echo "=========================================="
-echo ""
-echo "Outputs:"
-echo "  Training Output: $OUTPUT_DIR"
-echo "  Model on Hub: https://huggingface.co/$HUB_MODEL_ID"
-echo "  GGUF on Hub: https://huggingface.co/$GGUF_REPO_ID"
-echo "  Eval Results: $OUTPUT_DIR/eval_results"
-echo ""
-echo "To use with Ollama:"
-echo "  ollama pull hf.co/$GGUF_REPO_ID:Q4_K_M"
-echo ""
-'''
-
-    def _generate_dpo_script(self, model_id: str, dataset_id: str, config: dict) -> str:
-        """Generate DPO training script."""
-        use_4bit = "--use_4bit" if config.get('requires_4bit', False) else ""
-        streaming_args = ""
-        if config.get('streaming'):
-            streaming_args = f"--streaming --max_samples {config.get('max_samples', 500000)}"
-
-        return f'''#!/bin/bash
-# =============================================================================
-# {model_id.split('/')[-1]} DPO Training on {dataset_id.split('/')[-1]}
-# Auto-generated by SLURM Job Generator
-# =============================================================================
-
-#SBATCH --job-name={config['job_name']}
-#SBATCH --account={config['account']}
-#SBATCH --time={config['time_limit']}
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task={config['cpus']}
-#SBATCH --mem={config['memory']}
-#SBATCH --gres={config['gres']}
-#SBATCH --partition={config['partition']}
-#SBATCH --output=logs/%x-%j.out
-#SBATCH --error=logs/%x-%j.err
-#SBATCH --mail-type=BEGIN,END,FAIL
-
-# =============================================================================
-# Configuration
-# =============================================================================
-MODEL_NAME="{model_id}"
-DATASET_NAME="{dataset_id}"
-HUB_MODEL_ID="{config['hub_model_id']}"
-GGUF_REPO_ID="{config['gguf_repo_id']}"
-
-# Training parameters ({config['size_category']} model config)
-BATCH_SIZE={config['batch_size']}
-GRAD_ACCUM={config['grad_accum']}
-LEARNING_RATE={config['lr']}
-NUM_EPOCHS={config.get('num_train_epochs', 1)}
-MAX_LENGTH={config['max_length']}
-LORA_R={config['lora_r']}
-LORA_ALPHA={config['lora_alpha']}
-
-# =============================================================================
-# Environment Setup
-# =============================================================================
-echo "=========================================="
-echo "Job: $SLURM_JOB_NAME (ID: $SLURM_JOB_ID)"
-echo "Node: $SLURMD_NODENAME"
-echo "Start time: $(date)"
-echo "=========================================="
-
-mkdir -p logs
-
-# Load modules
-module load gcc arrow python/3.11.5
-
-# Activate virtual environment
-source /scratch/ermia/venvs/hf_env/bin/activate
-
-# Set environment variables
-export SCRATCH=${{SCRATCH:-/scratch/$USER}}
-export HF_HOME=$SCRATCH/.cache/huggingface
-export TRANSFORMERS_CACHE=$HF_HOME/hub
-export OUTPUT_DIR=$SCRATCH/outputs/{config['job_name']}-$SLURM_JOB_ID
-
-# Load HF token
-if [[ -f "/project/6014832/ermia/HF-TRL/.env" ]]; then
-    export $(grep -v '^#' /project/6014832/ermia/HF-TRL/.env | xargs)
-fi
-
-mkdir -p $OUTPUT_DIR
-
-echo ""
-echo "Configuration:"
-echo "  Model: $MODEL_NAME"
-echo "  Dataset: $DATASET_NAME"
-echo "  Hub Model ID: $HUB_MODEL_ID"
-echo "  Batch Size: $BATCH_SIZE"
-echo "  Gradient Accumulation: $GRAD_ACCUM"
-echo "  Effective Batch Size: $((BATCH_SIZE * GRAD_ACCUM))"
-echo "  LoRA Rank: $LORA_R"
-echo "  Output Dir: $OUTPUT_DIR"
-echo ""
-
-# =============================================================================
-# Phase 1: Training
-# =============================================================================
-echo "=========================================="
-echo "Phase 1: DPO Training"
-echo "=========================================="
-
-python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_dpo.py \\
-    --model_name_or_path $MODEL_NAME \\
-    --dataset_name $DATASET_NAME \\
-    --output_dir $OUTPUT_DIR \\
-    --num_train_epochs $NUM_EPOCHS \\
-    --per_device_train_batch_size $BATCH_SIZE \\
-    --gradient_accumulation_steps $GRAD_ACCUM \\
-    --learning_rate $LEARNING_RATE \\
-    --max_length $MAX_LENGTH \\
-    {use_4bit} \\
-    --bf16 \\
-    --gradient_checkpointing \\
-    --lora_r $LORA_R \\
-    --lora_alpha $LORA_ALPHA \\
-    --lora_dropout {config.get('lora_dropout', 0.0)} \\
-    --save_strategy steps \\
-    --save_steps {config.get('save_steps', 500)} \\
-    --save_total_limit {config.get('save_total_limit', 3)} \\
-    --logging_steps {config.get('logging_steps', 10)} \\
-    --push_to_hub \\
-    --hub_model_id $HUB_MODEL_ID \\
-    --hub_strategy {config.get('hub_strategy', 'end')} \\
-    --report_to {config.get('report_to', 'trackio')} \\
-    --trackio_dir $OUTPUT_DIR/trackio \\
-    --project "{config['job_name'].rsplit('-', 1)[0]}" \\
-    --run_name "{config['job_name']}-$SLURM_JOB_ID" {streaming_args}
-
-TRAIN_EXIT_CODE=$?
-
-if [[ $TRAIN_EXIT_CODE -ne 0 ]]; then
-    echo "ERROR: Training failed with exit code $TRAIN_EXIT_CODE"
-    exit $TRAIN_EXIT_CODE
-fi
-
-echo "Training completed successfully!"
-
-# =============================================================================
-# Phase 2: Generate Model Card
-# =============================================================================
-echo ""
-echo "=========================================="
-echo "Phase 2: Generating Model Card"
-echo "=========================================="
-
-python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/generate_model_card.py \\
-    --model_name "{config['hub_model_id'].split('/')[-1]}" \\
-    --base_model "$MODEL_NAME" \\
-    --dataset "$DATASET_NAME" \\
-    --training_method DPO \\
-    --author {config['hub_model_id'].split('/')[0]} \\
-    --license cc-by-nc-4.0 \\
-    --learning_rate $LEARNING_RATE \\
-    --batch_size $BATCH_SIZE \\
-    --epochs $NUM_EPOCHS \\
-    --max_length $MAX_LENGTH \\
-    --lora_r $LORA_R \\
-    --lora_alpha $LORA_ALPHA \\
-    --hardware "NVIDIA H100 MIG" \\
-    --output_dir $OUTPUT_DIR/model_card
-
-# Push model card to Hub
-python -c "
-from huggingface_hub import HfApi
-api = HfApi()
-api.upload_file(
-    path_or_fileobj='$OUTPUT_DIR/model_card/README.md',
-    path_in_repo='README.md',
-    repo_id='$HUB_MODEL_ID'
-)
-print('Model card uploaded to $HUB_MODEL_ID')
-"
-
-# =============================================================================
-# Phase 3: GGUF Conversion
-# =============================================================================
-echo ""
-echo "=========================================="
-echo "Phase 3: GGUF Conversion (Q4_K_M)"
-echo "=========================================="
-
-python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/convert_gguf.py \\
-    --model $HUB_MODEL_ID \\
-    --base_model $MODEL_NAME \\
-    --output_repo $GGUF_REPO_ID \\
-    --quantizations "Q4_K_M,Q5_K_M,Q8_0" \\
-    --output_dir $OUTPUT_DIR/gguf
-
-GGUF_EXIT_CODE=$?
-
-if [[ $GGUF_EXIT_CODE -ne 0 ]]; then
-    echo "WARNING: GGUF conversion had issues (exit code $GGUF_EXIT_CODE)"
-else
-    echo "GGUF conversion completed successfully!"
-fi
-
-# =============================================================================
-# Summary
-# =============================================================================
-echo ""
-echo "=========================================="
-echo "Pipeline Complete!"
-echo "End time: $(date)"
-echo "=========================================="
-echo ""
-echo "Outputs:"
-echo "  Training Output: $OUTPUT_DIR"
-echo "  Model on Hub: https://huggingface.co/$HUB_MODEL_ID"
-echo "  GGUF on Hub: https://huggingface.co/$GGUF_REPO_ID"
-echo ""
-echo "To use with Ollama:"
-echo "  ollama pull hf.co/$GGUF_REPO_ID:Q4_K_M"
-echo ""
-'''
+        # Merge model/dataset/method into config dict
+        full_config = {
+            "model_id": model_id,
+            "dataset_id": dataset_id,
+            "method": method,
+            **config,
+        }
+
+        # Convert to JobConfig
+        job_config = JobConfig.from_dict(full_config)
+
+        return self.generate(job_config)
+
+    def generate_section(
+        self,
+        config: JobConfig,
+        section: str,
+    ) -> str:
+        """Generate a specific section of the job script.
+
+        Useful for debugging or when you only need part of the script.
+
+        Args:
+            config: JobConfig object with all job parameters.
+            section: Section name ('header', 'environment', 'training', 'post').
+
+        Returns:
+            The requested script section as a string.
+
+        Raises:
+            ValueError: If section name is not recognized.
+        """
+        builders = {
+            "header": SBatchHeaderBuilder,
+            "environment": EnvironmentBuilder,
+            "training": TrainingBlockBuilder,
+            "post": PostProcessingBuilder,
+        }
+
+        if section not in builders:
+            raise ValueError(
+                f"Unknown section: {section}. "
+                f"Valid sections: {', '.join(builders.keys())}"
+            )
+
+        builder_class = builders[section]
+        return builder_class(config).build()

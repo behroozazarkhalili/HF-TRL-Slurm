@@ -1,4 +1,16 @@
 #!/usr/bin/env python3
+# /// script
+# dependencies = [
+#     "trl>=0.26.2",
+#     "peft>=0.18.0",
+#     "transformers>=4.57.3",
+#     "accelerate>=1.12.0",
+#     "datasets>=4.4.2",
+#     "bitsandbytes>=0.49.0",
+#     "trackio>=0.13.1",
+#     "liger-kernel>=0.5.0",
+# ]
+# ///
 """
 TRL GRPO (Group Relative Policy Optimization) Training Script
 ==============================================================
@@ -8,11 +20,21 @@ Production-ready GRPO training for online RL with:
 - Streaming mode support for large datasets
 - Trackio monitoring
 - Hub push for model persistence
+- TRL Memory Release Techniques for reduced VRAM usage
 
 GRPO Requirements:
 - Base model should be instruction-tuned
 - Dataset needs only 'prompt' column
 - Reward function or reward model
+
+Memory Optimization Options (from HuggingFace TRL docs):
+- --use_liger_kernel: Reduces memory by ~60%, increases throughput by ~20%
+- --use_vllm: Uses vLLM for faster generation
+- --vllm_enable_sleep_mode: Offloads vLLM to CPU during optimization
+- --gradient_checkpointing: Trades compute for memory
+- --no_ds3_gather_for_generation: Prevents OOM in DeepSpeed ZeRO-3
+
+See: https://huggingface.co/docs/trl/reducing_memory_usage
 
 Supported Datasets:
 - nvidia/OpenMathInstruct-2 (default, 14M samples, streaming)
@@ -26,6 +48,7 @@ Usage:
         --dataset_name nvidia/OpenMathInstruct-2 \
         --streaming --max_samples 500000 --seed 42 \
         --output_dir ./output \
+        --use_liger_kernel --gradient_checkpointing \
         --push_to_hub \
         --hub_model_id username/my-grpo-model
 """
@@ -113,8 +136,8 @@ def parse_args():
                         help="Weight decay")
     parser.add_argument("--warmup_ratio", type=float, default=0.1,
                         help="Warmup ratio")
-    parser.add_argument("--max_length", type=int, default=512,
-                        help="Maximum sequence length for generation")
+    parser.add_argument("--max_completion_length", type=int, default=512,
+                        help="Maximum sequence length for generated completions")
     parser.add_argument("--max_prompt_length", type=int, default=256,
                         help="Maximum prompt length")
 
@@ -146,8 +169,6 @@ def parse_args():
                         help="Project name for tracking")
     parser.add_argument("--trackio_space_id", type=str, default=None,
                         help="HF Space ID for trackio (e.g., 'username/space'). If not set, logs locally.")
-    parser.add_argument("--trackio_dir", type=str, default=None,
-                        help="Local directory for trackio logs. If set, overrides trackio_space_id.")
 
     # Performance arguments
     parser.add_argument("--bf16", action="store_true",
@@ -156,6 +177,24 @@ def parse_args():
                         help="Use float16 precision")
     parser.add_argument("--gradient_checkpointing", action="store_true",
                         help="Enable gradient checkpointing")
+
+    # TRL Memory Release Techniques
+    # See: https://huggingface.co/docs/trl/main/en/reducing_memory_usage
+    parser.add_argument("--use_vllm", action="store_true",
+                        help="Use vLLM for fast generation (requires pip install trl[vllm])")
+    parser.add_argument("--vllm_mode", type=str, default="colocate",
+                        choices=["server", "colocate"],
+                        help="vLLM mode: 'colocate' shares training GPUs, 'server' uses separate vLLM server")
+    parser.add_argument("--vllm_gpu_memory_utilization", type=float, default=0.3,
+                        help="GPU memory utilization for vLLM (0.0-1.0, default 0.3)")
+    parser.add_argument("--vllm_enable_sleep_mode", action="store_true",
+                        help="Enable vLLM sleep mode - offloads vLLM params to CPU during optimization step")
+    parser.add_argument("--use_liger_kernel", action="store_true",
+                        help="Use Liger Kernel to reduce memory by ~60%% and increase throughput by ~20%%")
+    parser.add_argument("--ds3_gather_for_generation", action="store_true", default=True,
+                        help="Gather model weights for generation in DeepSpeed ZeRO-3 (disable to prevent OOM)")
+    parser.add_argument("--no_ds3_gather_for_generation", action="store_false", dest="ds3_gather_for_generation",
+                        help="Disable gathering model weights for generation (prevents OOM but slower)")
 
     return parser.parse_args()
 
@@ -691,7 +730,7 @@ def main():
             }
         }
         # Use space_id if explicitly set, otherwise log locally (trackio default)
-        if hasattr(args, 'trackio_space_id') and args.trackio_space_id:
+        if args.trackio_space_id:
             trackio_kwargs["space_id"] = args.trackio_space_id
             print(f"Trackio logging to: HF Space {args.trackio_space_id}")
         else:
@@ -704,6 +743,22 @@ def main():
     # Load dataset
     train_dataset = load_and_prepare_dataset(args)
 
+    # Auto-detect reward type if using default 'combined'
+    if args.reward_type == "combined":
+        # Extract sample prompts for analysis
+        sample_prompts = []
+        if hasattr(train_dataset, '__len__') and len(train_dataset) > 0:
+            sample_size = min(10, len(train_dataset))
+            for i in range(sample_size):
+                sample = train_dataset[i]
+                if isinstance(sample, dict) and 'prompt' in sample:
+                    sample_prompts.append(sample['prompt'])
+        # Auto-detect appropriate reward type
+        detected_type = detect_reward_type(args.dataset_name, sample_prompts)
+        if detected_type != "combined":
+            print(f"Auto-switching reward type from 'combined' to '{detected_type}'")
+            args.reward_type = detected_type
+
     # Create LoRA config
     peft_config = create_peft_config(args)
 
@@ -711,12 +766,13 @@ def main():
     reward_fn = create_reward_function(args.reward_type)
 
     # GRPO Training arguments
+    # See: https://huggingface.co/docs/trl/grpo_trainer#trl.GRPOConfig
     training_args = GRPOConfig(
         output_dir=args.output_dir,
 
         # GRPO-specific
         num_generations=args.num_generations,
-        max_completion_length=args.max_length,
+        max_completion_length=args.max_completion_length,
         max_prompt_length=args.max_prompt_length,
 
         # Training hyperparameters
@@ -734,6 +790,15 @@ def main():
 
         # Gradient checkpointing
         gradient_checkpointing=args.gradient_checkpointing,
+
+        # TRL Memory Release Techniques
+        # See: https://huggingface.co/docs/trl/reducing_memory_usage
+        use_vllm=args.use_vllm,
+        vllm_mode=args.vllm_mode,
+        vllm_gpu_memory_utilization=args.vllm_gpu_memory_utilization,
+        vllm_enable_sleep_mode=args.vllm_enable_sleep_mode,
+        use_liger_kernel=args.use_liger_kernel,
+        ds3_gather_for_generation=args.ds3_gather_for_generation,
 
         # Saving
         save_strategy=args.save_strategy,

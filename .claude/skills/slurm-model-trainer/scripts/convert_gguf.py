@@ -463,8 +463,9 @@ def main():
                     base_model = config.get("base_model_name_or_path")
                     if base_model:
                         model_dir = merge_lora_adapter(args.model, base_model, work_dir)
-            except:
-                pass
+            except (OSError, json.JSONDecodeError, KeyError, ValueError) as e:
+                # LoRA detection failed - continue with model as-is
+                print(f"Note: Could not auto-detect LoRA adapter: {e}")
 
         # Convert to GGUF
         gguf_dir = os.path.join(work_dir, "gguf_output")

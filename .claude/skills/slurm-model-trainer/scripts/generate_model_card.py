@@ -403,13 +403,13 @@ model-index:
 
     # Build key features based on training method
     if args.training_method == "SFT":
-        key_features = f"""- **High-Quality Fine-Tuning**: Trained on {train_samples or 'N/A':,} carefully curated examples
+        key_features = f"""- **High-Quality Fine-Tuning**: Trained on {f'{train_samples:,}' if train_samples else 'N/A'} carefully curated examples
 - **Efficient Training**: Uses LoRA (Low-Rank Adaptation) with {args.quantization or '4-bit'} quantization
 - **Strong Performance**: Achieves {f'{accuracy*100:.2f}%' if accuracy else 'N/A'} token accuracy on evaluation set
 - **Optimized for Inference**: Available in multiple formats including GGUF quantizations"""
     elif args.training_method == "GRPO":
         key_features = f"""- **Reinforcement Learning**: Trained with Group Relative Policy Optimization
-- **Mathematical Reasoning**: Optimized on {train_samples or 'N/A':,} math problems from {dataset_name}
+- **Mathematical Reasoning**: Optimized on {f'{train_samples:,}' if train_samples else 'N/A'} math problems from {dataset_name}
 - **Reward Function**: Uses {reward_type or 'combined'} reward (accuracy + format)
 - **Efficient Training**: Uses LoRA with {args.quantization or '4-bit'} quantization
 - **Optimized for Inference**: Available in GGUF quantizations for local deployment"""
@@ -422,7 +422,7 @@ model-index:
     else:
         key_features = f"""- **{args.training_method} Training**: Fine-tuned using {args.training_method}
 - **Efficient Training**: Uses LoRA with {args.quantization or '4-bit'} quantization
-- **Trained on**: {train_samples or 'N/A':,} examples from {dataset_name}"""
+- **Trained on**: {f'{train_samples:,}' if train_samples else 'N/A'} examples from {dataset_name}"""
 
     # Build training configuration table
     training_config_rows = f"""| Learning Rate | {learning_rate} |
