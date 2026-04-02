@@ -21,8 +21,11 @@ env/
 *.swo
 
 # Logs
+logs/
 jobs/logs/
 *.log
+*.err
+*.out
 
 # Cache
 .cache/
