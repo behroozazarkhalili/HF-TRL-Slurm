@@ -89,14 +89,14 @@ if not hub_model_id:
 else:
     card_path = os.path.join(output_dir, 'model_card', 'README.md')
     if not os.path.exists(card_path):
-        print(f'WARNING: Model card not found at {card_path}')
+        print(f'WARNING: Model card not found at {{card_path}}')
     else:
         api.upload_file(
             path_or_fileobj=card_path,
             path_in_repo='README.md',
             repo_id=hub_model_id,
         )
-        print(f'Model card uploaded to {hub_model_id}')
+        print(f'Model card uploaded to {{hub_model_id}}')
 "
 """
 
@@ -125,7 +125,7 @@ else:
     cmd = [
         'lm_eval',
         '--model', 'hf',
-        '--model_args', f'pretrained={model_id},trust_remote_code=True',
+        '--model_args', f'pretrained={{model_id}},trust_remote_code=True',
         '--tasks', 'gsm8k,minerva_math',
         '--batch_size', 'auto',
         '--output_path', output_dir,
@@ -133,11 +133,11 @@ else:
     ]
 
     cmd_str = ' '.join(cmd)
-    print(f'Running: {cmd_str}')
+    print(f'Running: {{cmd_str}}')
     result = subprocess.run(cmd, capture_output=True, text=True)
     print(result.stdout)
     if result.returncode != 0:
-        print(f'Warning: Evaluation had issues: {result.stderr}')
+        print(f'Warning: Evaluation had issues: {{result.stderr}}')
 "
 """
 

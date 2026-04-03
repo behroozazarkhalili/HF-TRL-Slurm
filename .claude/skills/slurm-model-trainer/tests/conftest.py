@@ -275,10 +275,14 @@ def sample_math_prompts():
 
 @pytest.fixture
 def sample_ground_truth():
-    """Sample ground truth for testing math reward function."""
+    """Sample ground truth for testing math reward function.
+
+    Keys use _prompt_key() format (stripped strings, not hash()),
+    matching how MathRewardFunction.add_ground_truth() stores them.
+    """
     return {
-        hash("Calculate 15 + 27."): "42",
-        hash("If x = 5, what is 2x + 3?"): "13",
+        "Calculate 15 + 27.": "42",
+        "If x = 5, what is 2x + 3?": "13",
     }
 
 
