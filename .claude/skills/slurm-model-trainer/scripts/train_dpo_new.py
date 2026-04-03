@@ -49,7 +49,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from datasets import load_dataset
 from trl import DPOConfig, DPOTrainer
 
-from base_trainer import BaseTrainerScript
+from base_trainer import BaseTrainerScript, is_mig_gpu
 
 
 class DPOTrainerScript(BaseTrainerScript):
@@ -177,7 +177,7 @@ class DPOTrainerScript(BaseTrainerScript):
 
             # Other
             remove_unused_columns=False,
-            dataloader_pin_memory=True,
+            dataloader_pin_memory=not is_mig_gpu(),
             dataloader_num_workers=4,
         )
 

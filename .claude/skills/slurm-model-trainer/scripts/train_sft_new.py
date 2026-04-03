@@ -42,7 +42,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from datasets import load_dataset
 from trl import SFTConfig, SFTTrainer
 
-from base_trainer import BaseTrainerScript
+from base_trainer import BaseTrainerScript, is_mig_gpu
 
 
 class SFTTrainerScript(BaseTrainerScript):
@@ -174,7 +174,7 @@ class SFTTrainerScript(BaseTrainerScript):
 
             # Other
             remove_unused_columns=False,
-            dataloader_pin_memory=True,
+            dataloader_pin_memory=not is_mig_gpu(),
             dataloader_num_workers=4,
             dataset_num_proc=num_proc,
         )

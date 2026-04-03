@@ -43,6 +43,29 @@ from transformers import (
     PreTrainedTokenizer,
 )
 
+def is_mig_gpu() -> bool:
+    """Detect if running on an NVIDIA MIG (Multi-Instance GPU) partition.
+
+    MIG slices cause pin_memory failures in PyTorch dataloader workers
+    because the subprocess can't see the GPU. Returns True on MIG so
+    callers can disable pin_memory to avoid a ~12x slowdown.
+    """
+    if not torch.cuda.is_available():
+        return False
+    try:
+        props = torch.cuda.get_device_properties(0)
+        name = props.name.lower()
+        if "mig" in name:
+            return True
+        # Heuristic: H100 with <60GB is likely a MIG slice (full = 80GB)
+        total_gb = props.total_mem / 1024**3
+        if "h100" in name and total_gb < 60:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 # Optional trackio import
 try:
     import trackio

@@ -50,7 +50,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from datasets import load_dataset, Dataset
 from trl import GRPOConfig, GRPOTrainer
 
-from base_trainer import BaseTrainerScript
+from base_trainer import BaseTrainerScript, is_mig_gpu
 from rewards import (
     MathRewardFunction,
     FormatRewardFunction,
@@ -223,7 +223,7 @@ class GRPOTrainerScript(BaseTrainerScript):
             hub_strategy=self.args.hub_strategy,
 
             # Other
-            dataloader_pin_memory=True,
+            dataloader_pin_memory=not is_mig_gpu(),
             dataloader_num_workers=4,
         )
 

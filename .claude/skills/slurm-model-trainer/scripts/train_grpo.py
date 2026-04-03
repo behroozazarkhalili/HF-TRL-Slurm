@@ -902,6 +902,29 @@ def create_reward_function(reward_type: str):
         return reward_fn
 
 
+def is_mig_gpu() -> bool:
+    """Detect if running on an NVIDIA MIG (Multi-Instance GPU) partition.
+
+    MIG slices cause pin_memory failures in PyTorch dataloader workers
+    because the subprocess can't see the GPU. Disabling pin_memory on MIG
+    avoids the 12x slowdown from the fallback path.
+    """
+    if not torch.cuda.is_available():
+        return False
+    try:
+        name = torch.cuda.get_device_properties(0).name.lower()
+        # MIG device names contain "MIG" or have reduced memory (e.g., 40GB on 80GB card)
+        if "mig" in name:
+            return True
+        # Heuristic: H100 with <60GB is likely a MIG slice
+        total_gb = torch.cuda.get_device_properties(0).total_mem / 1024**3
+        if "h100" in name and total_gb < 60:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def print_gpu_diagnostics():
     """Print GPU environment info for debugging node-specific issues."""
     import os
@@ -913,6 +936,7 @@ def print_gpu_diagnostics():
         props = torch.cuda.get_device_properties(0)
         print(f"Device: {props.name} (compute {props.major}.{props.minor}, {props.total_memory / 1024**3:.1f} GB)")
         print(f"bf16 supported: {torch.cuda.is_bf16_supported()}")
+        print(f"MIG detected: {is_mig_gpu()}")
     else:
         print("ERROR: No GPU detected! Training will fail or run on CPU.")
         print("Check: CUDA_VISIBLE_DEVICES, driver version, MIG configuration.")
@@ -1035,7 +1059,7 @@ def main():
         hub_strategy=args.hub_strategy,
 
         # Other
-        dataloader_pin_memory=True,
+        dataloader_pin_memory=not is_mig_gpu(),
         dataloader_num_workers=4,
     )
 

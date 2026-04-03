@@ -58,6 +58,21 @@ except ImportError:
     print("Warning: trackio not available, using default logging")
 
 
+def _is_mig() -> bool:
+    """Detect MIG GPU — disable pin_memory to avoid 12x slowdown."""
+    if not torch.cuda.is_available():
+        return False
+    try:
+        p = torch.cuda.get_device_properties(0)
+        if "mig" in p.name.lower():
+            return True
+        if "h100" in p.name.lower() and p.total_mem / 1024**3 < 60:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="SFT Training with Unsloth")
 
@@ -336,7 +351,7 @@ def main():
         # Other
         dataset_text_field=args.dataset_text_field,
         packing=args.packing,
-        dataloader_pin_memory=True,
+        dataloader_pin_memory=not _is_mig(),
         dataloader_num_workers=4,
     )
 
