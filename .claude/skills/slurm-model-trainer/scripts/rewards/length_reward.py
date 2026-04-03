@@ -82,12 +82,13 @@ class LengthRewardFunction(RewardFunction):
         if word_count < self.min_words:
             return 0.0
 
-        if word_count < 30:
-            return 0.3
-
         if word_count < self.optimal_min:
             # Linear interpolation from 0.3 to 0.7
-            progress = (word_count - 30) / (self.optimal_min - 30)
+            ramp_start = self.min_words
+            ramp_range = self.optimal_min - ramp_start
+            if ramp_range <= 0:
+                return 0.7  # optimal_min <= min_words: skip ramp
+            progress = (word_count - ramp_start) / ramp_range
             return 0.3 + 0.4 * progress
 
         if word_count <= self.optimal_max:

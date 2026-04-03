@@ -59,15 +59,15 @@ class EnvironmentBuilder(BaseBuilder):
 
         # Base configuration variables (all methods)
         variables = f"""{self._comment_block("Configuration")}
-MODEL_NAME="{c.model_id}"
-DATASET_NAME="{c.dataset_id}"
+MODEL_NAME='{c.model_id}'
+DATASET_NAME='{c.dataset_id}'
 
 # Sample size configuration (for model naming when using streaming)
 MAX_SAMPLES={c.max_samples if c.max_samples else 0}
-SAMPLE_SIZE_LABEL="{c.sample_size_label}"
+SAMPLE_SIZE_LABEL='{c.sample_size_label}'
 
-HUB_MODEL_ID="{c.hub_model_id}"
-GGUF_REPO_ID="{c.gguf_repo_id}"
+HUB_MODEL_ID='{c.hub_model_id}'
+GGUF_REPO_ID='{c.gguf_repo_id}'
 
 # Training parameters ({c.size_category} model config)
 BATCH_SIZE={c.batch_size}
@@ -83,7 +83,7 @@ LORA_ALPHA={c.lora_alpha}"""
 MAX_COMPLETION_LENGTH={c.max_length}
 MAX_PROMPT_LENGTH={c.max_prompt_length}
 NUM_GENERATIONS={c.num_gen}
-REWARD_TYPE="{c.reward_type}\""""
+REWARD_TYPE='{c.reward_type}'"""
         else:
             # SFT and DPO use MAX_SEQ_LENGTH
             variables += f"""
@@ -137,7 +137,7 @@ source {self.venv_path}/bin/activate
 export SCRATCH=${{SCRATCH:-/scratch/$USER}}
 export HF_HOME=$SCRATCH/.cache/huggingface
 export TRANSFORMERS_CACHE=$HF_HOME/hub
-export OUTPUT_DIR=$SCRATCH/outputs/{self.config.job_name}-$SLURM_JOB_ID
+export OUTPUT_DIR="$SCRATCH/outputs/{self.config.job_name}-$SLURM_JOB_ID"
 """
 
     def _hf_token_setup(self) -> str:
@@ -148,7 +148,14 @@ export OUTPUT_DIR=$SCRATCH/outputs/{self.config.job_name}-$SLURM_JOB_ID
         """
         return f"""# Load HF token
 if [[ -f "{self.env_file_path}" ]]; then
-    export $(grep -v '^#' {self.env_file_path} | xargs)
+    while IFS='=' read -r key value; do
+        # Skip comments and empty lines
+        [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
+        # Remove surrounding quotes from value
+        value="${{value%\\"}}"; value="${{value#\\"}}"
+        value="${{value%\\'}}"; value="${{value#\\'}}"
+        export "$key=$value"
+    done < "{self.env_file_path}"
 fi
 """
 

@@ -187,12 +187,18 @@ def load_model_and_tokenizer(args):
     elif args.use_8bit:
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
+    # device_map="auto" is incompatible with DeepSpeed / multi-GPU accelerate.
+    use_device_map = (
+        not os.environ.get("ACCELERATE_USE_DEEPSPEED")
+        and int(os.environ.get("WORLD_SIZE", "1")) <= 1
+    )
+
     # Load model
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
         quantization_config=quantization_config,
         torch_dtype=compute_dtype,
-        device_map="auto",
+        device_map="auto" if use_device_map else None,
         trust_remote_code=True,
     )
 
@@ -460,6 +466,10 @@ def main():
     print("SFT Training with TRL")
     print("=" * 60)
 
+    # Validate push_to_hub requires hub_model_id
+    if args.push_to_hub and not args.hub_model_id:
+        raise ValueError("--push_to_hub requires --hub_model_id to be set")
+
     # Initialize tracking (logs locally by default, set space_id for HF Space)
     if args.report_to == "trackio" and TRACKIO_AVAILABLE:
         run_name = args.run_name or f"sft-{args.model_name_or_path.split('/')[-1]}"
@@ -532,7 +542,10 @@ def main():
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,
         save_total_limit=args.save_total_limit,
-        load_best_model_at_end=True if eval_dataset is not None else False,
+        load_best_model_at_end=(
+            eval_dataset is not None
+            and args.save_strategy == args.eval_strategy
+        ),
 
         # Logging
         logging_steps=args.logging_steps,

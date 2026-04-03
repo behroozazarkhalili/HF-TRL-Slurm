@@ -61,8 +61,8 @@ def parse_args():
     # Model arguments
     parser.add_argument("--model_name_or_path", type=str, required=True,
                         help="Path to pretrained model (should be instruction-tuned)")
-    parser.add_argument("--load_in_4bit", action="store_true", default=True,
-                        help="Load model in 4-bit")
+    parser.add_argument("--load_in_4bit", action=argparse.BooleanOptionalAction, default=True,
+                        help="Load model in 4-bit (use --no-load_in_4bit to disable)")
 
     # Dataset arguments
     parser.add_argument("--dataset_name", type=str, required=True,
@@ -107,7 +107,7 @@ def parse_args():
                         help="Evaluation batch size per device")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8,
                         help="Gradient accumulation steps")
-    parser.add_argument("--learning_rate", type=float, default=5e-6,
+    parser.add_argument("--learning_rate", type=float, default=5e-7,
                         help="Learning rate (lower for DPO)")
     parser.add_argument("--weight_decay", type=float, default=0.01,
                         help="Weight decay")
@@ -155,10 +155,10 @@ def parse_args():
                         help="HF Space ID for trackio (e.g., 'username/space'). If not set, logs locally.")
 
     # Performance arguments
-    parser.add_argument("--bf16", action="store_true", default=True,
-                        help="Use bfloat16 precision")
-    parser.add_argument("--gradient_checkpointing", action="store_true", default=True,
-                        help="Enable gradient checkpointing")
+    parser.add_argument("--bf16", action=argparse.BooleanOptionalAction, default=True,
+                        help="Use bfloat16 precision (use --no-bf16 to disable)")
+    parser.add_argument("--gradient_checkpointing", action=argparse.BooleanOptionalAction, default=True,
+                        help="Enable gradient checkpointing (use --no-gradient_checkpointing to disable)")
 
     return parser.parse_args()
 
@@ -167,10 +167,9 @@ def load_model_and_tokenizer_unsloth(args):
     """Load model and tokenizer with Unsloth optimizations."""
     print(f"Loading model with Unsloth: {args.model_name_or_path}")
 
-    # Detect dtype
+    # Detect dtype based on GPU capability (not name matching)
     if torch.cuda.is_available():
-        gpu_name = torch.cuda.get_device_name(0).lower()
-        if "h100" in gpu_name or "a100" in gpu_name:
+        if torch.cuda.is_bf16_supported():
             dtype = torch.bfloat16
         else:
             dtype = torch.float16
@@ -241,6 +240,15 @@ def load_and_prepare_dataset(args):
 
         dataset = dataset.map(map_columns, remove_columns=dataset.column_names)
 
+        # Post-validation: check mapped columns have non-empty content
+        sample = dataset[0]
+        unmapped = [col for col in required_columns if col not in sample or sample[col] == ""]
+        if unmapped:
+            raise ValueError(
+                f"Could not map required DPO columns: {unmapped}. "
+                f"Dataset must have 'prompt', 'chosen', 'rejected' columns."
+            )
+
     # Limit samples
     if args.max_samples is not None:
         dataset = dataset.select(range(min(args.max_samples, len(dataset))))
@@ -270,6 +278,16 @@ def main():
     print("DPO Training with Unsloth (2-3x Faster)")
     print("=" * 60)
     print(f"Beta (KL penalty): {args.beta}")
+
+    # Validate push_to_hub requires hub_model_id
+    if args.push_to_hub and not args.hub_model_id:
+        raise ValueError("--push_to_hub requires --hub_model_id to be set")
+
+    # Auto-detect precision BEFORE loading model
+    if args.bf16:
+        if not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
+            print("WARNING: bf16 requested but not supported on this GPU. Falling back to fp16.")
+            args.bf16 = False
 
     # Initialize tracking (logs locally by default, set space_id for HF Space)
     if args.report_to == "trackio" and TRACKIO_AVAILABLE:
@@ -318,10 +336,15 @@ def main():
         learning_rate=args.learning_rate,
         weight_decay=args.weight_decay,
         warmup_ratio=args.warmup_ratio,
+        lr_scheduler_type="cosine",
         optim="adamw_8bit",
 
         # Precision
         bf16=args.bf16,
+        fp16=not args.bf16,
+
+        # Gradient checkpointing (required for LoRA compatibility)
+        gradient_checkpointing=args.gradient_checkpointing,
 
         # Evaluation
         eval_strategy=args.eval_strategy if eval_dataset is not None else "no",
@@ -331,6 +354,10 @@ def main():
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,
         save_total_limit=args.save_total_limit,
+        load_best_model_at_end=(
+            eval_dataset is not None
+            and args.save_strategy == args.eval_strategy
+        ),
 
         # Logging
         logging_steps=args.logging_steps,
@@ -342,6 +369,12 @@ def main():
         push_to_hub=args.push_to_hub,
         hub_model_id=args.hub_model_id,
         hub_strategy=args.hub_strategy,
+
+        # Other
+        remove_unused_columns=False,
+        logging_first_step=True,
+        dataloader_pin_memory=True,
+        dataloader_num_workers=4,
     )
 
     # Create trainer

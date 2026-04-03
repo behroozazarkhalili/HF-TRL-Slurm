@@ -357,23 +357,36 @@ def _get_num_layers(params_b: float) -> int:
 # Smart GPU Selection
 # =============================================================================
 
-@lru_cache(maxsize=128)
 def fetch_model_params(model_id: str) -> float:
-    """Get model parameter count from HuggingFace Hub API."""
+    """Get model parameter count from HuggingFace Hub API.
+
+    Tries the API first, then falls back to regex parsing of the model name.
+    Logs warnings when falling back so the user knows the estimate may be wrong.
+    """
+    # Try API first
     try:
         from huggingface_hub import model_info
         info = model_info(model_id)
         params = info.safetensors.get("total", 0) if info.safetensors else 0
         if params > 0:
             return params / 1e9
-    except Exception:
-        pass
+    except ImportError:
+        logger.warning("huggingface_hub not installed — cannot fetch model metadata")
+    except Exception as e:
+        logger.warning("Could not fetch model params from Hub for %s: %s", model_id, e)
 
     # Fallback: parse from name (e.g., "Qwen2.5-0.5B" → 0.5)
     match = re.search(r'(\d+\.?\d*)\s*([bm])', model_id.lower())
     if match:
         val, unit = float(match.group(1)), match.group(2)
-        return val if unit == 'b' else val / 1000
+        result = val if unit == 'b' else val / 1000
+        logger.info("Estimated %s params from model name: %.1fB", model_id, result)
+        return result
+
+    logger.warning(
+        "Could not determine param count for '%s' — defaulting to 1.0B. "
+        "Pass explicit --params to override.", model_id
+    )
     return 1.0
 
 

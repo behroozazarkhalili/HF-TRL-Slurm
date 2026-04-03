@@ -64,8 +64,8 @@ def parse_args():
     # Model arguments
     parser.add_argument("--model_name_or_path", type=str, required=True,
                         help="Path to pretrained model")
-    parser.add_argument("--load_in_4bit", action="store_true", default=True,
-                        help="Load model in 4-bit (default: True)")
+    parser.add_argument("--load_in_4bit", action=argparse.BooleanOptionalAction, default=True,
+                        help="Load model in 4-bit (default: True, use --no-load_in_4bit to disable)")
 
     # Dataset arguments
     parser.add_argument("--dataset_name", type=str, required=True,
@@ -111,6 +111,10 @@ def parse_args():
                         help="Warmup ratio")
     parser.add_argument("--max_seq_length", type=int, default=2048,
                         help="Maximum sequence length")
+    parser.add_argument("--dataset_text_field", type=str, default=None,
+                        help="Dataset column containing text (auto-detected if not set)")
+    parser.add_argument("--packing", action=argparse.BooleanOptionalAction, default=False,
+                        help="Enable sequence packing for efficiency (use --packing to enable)")
 
     # Evaluation arguments
     parser.add_argument("--eval_strategy", type=str, default="steps",
@@ -149,10 +153,10 @@ def parse_args():
                         help="HF Space ID for trackio (e.g., 'username/space'). If not set, logs locally.")
 
     # Performance arguments
-    parser.add_argument("--bf16", action="store_true", default=True,
-                        help="Use bfloat16 precision (default for H100)")
-    parser.add_argument("--gradient_checkpointing", action="store_true", default=True,
-                        help="Enable gradient checkpointing")
+    parser.add_argument("--bf16", action=argparse.BooleanOptionalAction, default=True,
+                        help="Use bfloat16 precision (use --no-bf16 to disable)")
+    parser.add_argument("--gradient_checkpointing", action=argparse.BooleanOptionalAction, default=True,
+                        help="Enable gradient checkpointing (use --no-gradient_checkpointing to disable)")
 
     return parser.parse_args()
 
@@ -161,10 +165,9 @@ def load_model_and_tokenizer_unsloth(args):
     """Load model and tokenizer with Unsloth optimizations."""
     print(f"Loading model with Unsloth: {args.model_name_or_path}")
 
-    # Detect dtype based on GPU
+    # Detect dtype based on GPU capability (not name matching)
     if torch.cuda.is_available():
-        gpu_name = torch.cuda.get_device_name(0).lower()
-        if "h100" in gpu_name or "a100" in gpu_name:
+        if torch.cuda.is_bf16_supported():
             dtype = torch.bfloat16
         else:
             dtype = torch.float16
@@ -239,6 +242,16 @@ def main():
     print("SFT Training with Unsloth (2-3x Faster)")
     print("=" * 60)
 
+    # Validate push_to_hub requires hub_model_id
+    if args.push_to_hub and not args.hub_model_id:
+        raise ValueError("--push_to_hub requires --hub_model_id to be set")
+
+    # Auto-detect precision BEFORE loading model
+    if args.bf16:
+        if not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
+            print("WARNING: bf16 requested but not supported on this GPU. Falling back to fp16.")
+            args.bf16 = False
+
     # Initialize tracking (logs locally by default, set space_id for HF Space)
     if args.report_to == "trackio" and TRACKIO_AVAILABLE:
         run_name = args.run_name or f"sft-unsloth-{args.model_name_or_path.split('/')[-1]}"
@@ -286,11 +299,14 @@ def main():
         optim="adamw_8bit",  # Use 8-bit Adam for Unsloth
 
         # Sequence length
-        max_seq_length=args.max_seq_length,
+        max_length=args.max_seq_length,
 
         # Precision
         bf16=args.bf16,
         fp16=not args.bf16,
+
+        # Gradient checkpointing
+        gradient_checkpointing=args.gradient_checkpointing,
 
         # Evaluation
         eval_strategy=args.eval_strategy if eval_dataset is not None else "no",
@@ -300,6 +316,10 @@ def main():
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,
         save_total_limit=args.save_total_limit,
+        load_best_model_at_end=(
+            eval_dataset is not None
+            and args.save_strategy == args.eval_strategy
+        ),
 
         # Logging
         logging_steps=args.logging_steps,
@@ -314,8 +334,8 @@ def main():
         hub_strategy=args.hub_strategy,
 
         # Other
-        dataset_text_field="text",
-        packing=True,  # Enable packing for efficiency
+        dataset_text_field=args.dataset_text_field,
+        packing=args.packing,
         dataloader_pin_memory=True,
         dataloader_num_workers=4,
     )
@@ -326,7 +346,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
     )
 
     # Print memory stats before training

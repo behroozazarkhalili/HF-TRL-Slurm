@@ -39,7 +39,12 @@ Usage:
 """
 
 import argparse
+import os
+import sys
 from typing import Any, Optional, Tuple
+
+# Ensure sibling modules (base_trainer) are importable
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from datasets import load_dataset
 from trl import DPOConfig, DPOTrainer
@@ -75,24 +80,8 @@ class DPOTrainerScript(BaseTrainerScript):
             help="Maximum prompt length"
         )
 
-        # Evaluation arguments
-        parser.add_argument(
-            "--eval_strategy", type=str, default="steps",
-            choices=["no", "steps", "epoch"],
-            help="Evaluation strategy"
-        )
-        parser.add_argument(
-            "--eval_steps", type=int, default=100,
-            help="Evaluation frequency in steps"
-        )
-        parser.add_argument(
-            "--test_size", type=float, default=0.1,
-            help="Fraction of data to use for evaluation"
-        )
-        parser.add_argument(
-            "--per_device_eval_batch_size", type=int, default=2,
-            help="Evaluation batch size per device"
-        )
+        # Note: --eval_strategy, --eval_steps, --test_size, --per_device_eval_batch_size
+        # are already defined in the base class (BaseTrainerScript._parse_args)
 
     def prepare_dataset(self) -> Tuple[Any, Optional[Any]]:
         """Prepare dataset for DPO training.
@@ -157,6 +146,10 @@ class DPOTrainerScript(BaseTrainerScript):
 
             # Gradient checkpointing
             gradient_checkpointing=self.args.gradient_checkpointing,
+            gradient_checkpointing_kwargs=(
+                {"use_reentrant": False}
+                if self.args.gradient_checkpointing else None
+            ),
 
             # Evaluation
             eval_strategy=self.args.eval_strategy if eval_enabled else "no",
@@ -166,10 +159,14 @@ class DPOTrainerScript(BaseTrainerScript):
             save_strategy=self.args.save_strategy,
             save_steps=self.args.save_steps,
             save_total_limit=self.args.save_total_limit,
-            load_best_model_at_end=eval_enabled,
+            load_best_model_at_end=(
+                eval_enabled
+                and self.args.save_strategy == self.args.eval_strategy
+            ),
 
             # Logging
             logging_steps=self.args.logging_steps,
+            logging_first_step=True,
             report_to=self.get_report_to_list(),
             run_name=self.args.run_name,
 
@@ -180,6 +177,8 @@ class DPOTrainerScript(BaseTrainerScript):
 
             # Other
             remove_unused_columns=False,
+            dataloader_pin_memory=True,
+            dataloader_num_workers=4,
         )
 
         # Create trainer
@@ -235,11 +234,24 @@ class DPOTrainerScript(BaseTrainerScript):
                         if source in example:
                             result[target] = example[source]
                             break
-                    else:
-                        result[target] = ""  # Fallback empty
             return result
 
-        return dataset.map(map_columns, remove_columns=dataset.column_names)
+        dataset = dataset.map(map_columns, remove_columns=dataset.column_names)
+
+        # Post-validation: check mapped columns have non-empty content
+        sample = dataset[0]
+        unmapped = [
+            col for col in required_columns
+            if col not in sample or sample[col] == ""
+        ]
+        if unmapped:
+            raise ValueError(
+                f"Could not map required DPO columns: {unmapped}. "
+                f"Dataset must have 'prompt', 'chosen', 'rejected' columns "
+                f"or compatible alternatives."
+            )
+
+        return dataset
 
     def _create_splits(self, dataset) -> Tuple[Any, Optional[Any]]:
         """Create train/eval splits.

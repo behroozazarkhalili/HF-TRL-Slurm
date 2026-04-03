@@ -125,12 +125,13 @@ class TrainingBlockBuilder(BaseBuilder):
             f"    --logging_steps {c.logging_steps} \\",
         ])
 
-        # Hub push configuration
-        args.extend([
-            "    --push_to_hub \\",
-            "    --hub_model_id $HUB_MODEL_ID \\",
-            f"    --hub_strategy {c.hub_strategy} \\",
-        ])
+        # Hub push configuration (only if hub_model_id is set)
+        if getattr(c, 'hub_model_id', None) or getattr(c, 'push_to_hub', True):
+            args.extend([
+                "    --push_to_hub \\",
+                "    --hub_model_id $HUB_MODEL_ID \\",
+                f"    --hub_strategy {c.hub_strategy} \\",
+            ])
 
         # Tracking/logging configuration
         project_name = c.job_name.rsplit("-", 1)[0]
@@ -172,7 +173,9 @@ class TrainingBlockBuilder(BaseBuilder):
         """
         return [
             "    --max_length $MAX_SEQ_LENGTH \\",
-            "    --per_device_eval_batch_size $BATCH_SIZE",
+            "    --per_device_eval_batch_size $BATCH_SIZE \\",
+            "    --eval_strategy steps \\",
+            "    --eval_steps 100",
             "",  # Empty line for readability
         ]
 
@@ -197,7 +200,11 @@ class TrainingBlockBuilder(BaseBuilder):
             DPO argument strings.
         """
         return [
-            "    --max_length $MAX_SEQ_LENGTH",
+            "    --max_length $MAX_SEQ_LENGTH \\",
+            "    --max_prompt_length 512 \\",
+            "    --per_device_eval_batch_size $BATCH_SIZE \\",
+            "    --eval_strategy steps \\",
+            "    --eval_steps 100",
             "",  # Empty line for readability
         ]
 

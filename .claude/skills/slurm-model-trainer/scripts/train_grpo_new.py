@@ -39,8 +39,13 @@ Usage:
 """
 
 import argparse
+import os
 import re
+import sys
 from typing import Any, List, Optional, Tuple
+
+# Ensure sibling modules (base_trainer, rewards) are importable
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from datasets import load_dataset, Dataset
 from trl import GRPOConfig, GRPOTrainer
@@ -88,6 +93,11 @@ class GRPOTrainerScript(BaseTrainerScript):
             help="Maximum prompt length"
         )
 
+        parser.add_argument(
+            "--max_completion_length", type=int, default=512,
+            help="Maximum length for generated completions"
+        )
+
         # Dataset arguments
         parser.add_argument(
             "--streaming", action="store_true",
@@ -96,6 +106,34 @@ class GRPOTrainerScript(BaseTrainerScript):
         parser.add_argument(
             "--seed", type=int, default=42,
             help="Random seed for reproducibility (shuffling)"
+        )
+
+        # TRL Memory Release Techniques
+        parser.add_argument(
+            "--use_vllm", action="store_true",
+            help="Use vLLM for fast generation"
+        )
+        parser.add_argument(
+            "--vllm_mode", type=str, default="colocate",
+            choices=["server", "colocate"],
+            help="vLLM mode"
+        )
+        parser.add_argument(
+            "--vllm_gpu_memory_utilization", type=float, default=0.3,
+            help="GPU memory utilization for vLLM"
+        )
+        parser.add_argument(
+            "--vllm_enable_sleep_mode", action="store_true",
+            help="Enable vLLM sleep mode"
+        )
+        parser.add_argument(
+            "--use_liger_kernel", action="store_true",
+            help="Use Liger Kernel to reduce memory"
+        )
+        parser.add_argument(
+            "--ds3_gather_for_generation",
+            action=argparse.BooleanOptionalAction, default=True,
+            help="Gather weights for generation in DeepSpeed ZeRO-3"
         )
 
     def prepare_dataset(self) -> Tuple[Any, Optional[Any]]:
@@ -136,7 +174,7 @@ class GRPOTrainerScript(BaseTrainerScript):
 
             # GRPO-specific
             num_generations=self.args.num_generations,
-            max_completion_length=self.args.max_length,
+            max_completion_length=self.args.max_completion_length,
             max_prompt_length=self.args.max_prompt_length,
 
             # Training hyperparameters
@@ -147,6 +185,7 @@ class GRPOTrainerScript(BaseTrainerScript):
             learning_rate=self.args.learning_rate,
             weight_decay=self.args.weight_decay,
             warmup_ratio=self.args.warmup_ratio,
+            lr_scheduler_type="cosine",
 
             # Precision
             bf16=self.args.bf16,
@@ -154,6 +193,18 @@ class GRPOTrainerScript(BaseTrainerScript):
 
             # Gradient checkpointing
             gradient_checkpointing=self.args.gradient_checkpointing,
+            gradient_checkpointing_kwargs=(
+                {"use_reentrant": False}
+                if self.args.gradient_checkpointing else None
+            ),
+
+            # TRL Memory Release Techniques
+            use_vllm=self.args.use_vllm,
+            vllm_mode=self.args.vllm_mode,
+            vllm_gpu_memory_utilization=self.args.vllm_gpu_memory_utilization,
+            vllm_enable_sleep_mode=self.args.vllm_enable_sleep_mode,
+            use_liger_kernel=self.args.use_liger_kernel,
+            ds3_gather_for_generation=self.args.ds3_gather_for_generation,
 
             # Saving
             save_strategy=self.args.save_strategy,
@@ -162,6 +213,7 @@ class GRPOTrainerScript(BaseTrainerScript):
 
             # Logging
             logging_steps=self.args.logging_steps,
+            logging_first_step=True,
             report_to=self.get_report_to_list(),
             run_name=self.args.run_name,
 
@@ -169,6 +221,10 @@ class GRPOTrainerScript(BaseTrainerScript):
             push_to_hub=self.args.push_to_hub,
             hub_model_id=self.args.hub_model_id,
             hub_strategy=self.args.hub_strategy,
+
+            # Other
+            dataloader_pin_memory=True,
+            dataloader_num_workers=4,
         )
 
         # Create trainer
@@ -186,24 +242,13 @@ class GRPOTrainerScript(BaseTrainerScript):
     # =========================================================================
 
     def _detect_reward_type(self) -> str:
-        """Auto-detect appropriate reward type based on dataset."""
-        if self.args.reward_type != "combined":
-            return self.args.reward_type
+        """Return the user's chosen reward type.
 
-        dataset_lower = self.args.dataset_name.lower()
-
-        # Check for math-related keywords
-        math_keywords = [
-            'math', 'gsm', 'numina', 'openr1', 'hendrycks',
-            'olympiad', 'aime', 'amc', 'competition', 'reasoning', 'arithmetic'
-        ]
-
-        for keyword in math_keywords:
-            if keyword in dataset_lower:
-                print(f"Auto-detected math dataset from keyword '{keyword}'")
-                return "math"
-
-        return "combined"
+        Note: 'combined' already includes math accuracy at 50% weight,
+        so it is strictly better than 'math' for math datasets — it also
+        rewards format, length, and reasoning quality. No auto-downgrade.
+        """
+        return self.args.reward_type
 
     def _create_reward_function(self, reward_type: str):
         """Create the appropriate reward function.
@@ -446,11 +491,37 @@ class GRPOTrainerScript(BaseTrainerScript):
 
     @staticmethod
     def _extract_boxed_answer(text: str) -> Optional[str]:
-        """Extract answer from \\boxed{} in a solution string."""
+        """Extract answer from the LAST \\boxed{} in a solution string.
+
+        Uses brace-depth counting to handle nested braces like
+        \\boxed{\\frac{3}{4}} correctly. Finds the LAST occurrence
+        because math solutions put the final answer in the last \\boxed{}.
+        """
         if not text:
             return None
-        match = re.search(r'\\boxed\{([^}]+)\}', text)
-        return match.group(1).strip() if match else None
+
+        idx = text.rfind('\\boxed{')
+        if idx == -1:
+            idx = text.rfind('\\boxed {')
+        if idx == -1:
+            return None
+
+        brace_start = text.find('{', idx)
+        if brace_start == -1:
+            return None
+
+        depth = 1
+        pos = brace_start + 1
+        while pos < len(text) and depth > 0:
+            if text[pos] == '{':
+                depth += 1
+            elif text[pos] == '}':
+                depth -= 1
+            pos += 1
+
+        if depth == 0:
+            return text[brace_start + 1:pos - 1].strip()
+        return None
 
     def _add_ground_truth(self, prompt: str, answer: str) -> None:
         """Add ground truth to the reward function."""

@@ -33,7 +33,11 @@ Usage:
 
 import argparse
 import os
+import sys
 from typing import Any, Optional, Tuple
+
+# Ensure sibling modules (base_trainer) are importable
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from datasets import load_dataset
 from trl import SFTConfig, SFTTrainer
@@ -137,8 +141,10 @@ class SFTTrainerScript(BaseTrainerScript):
 
             # Gradient checkpointing
             gradient_checkpointing=self.args.gradient_checkpointing,
-            gradient_checkpointing_kwargs={"use_reentrant": False}
-                if self.args.gradient_checkpointing else None,
+            gradient_checkpointing_kwargs=(
+                {"use_reentrant": False}
+                if self.args.gradient_checkpointing else None
+            ),
 
             # Evaluation
             eval_strategy=self.args.eval_strategy
@@ -150,7 +156,10 @@ class SFTTrainerScript(BaseTrainerScript):
             save_strategy=self.args.save_strategy,
             save_steps=self.args.save_steps,
             save_total_limit=self.args.save_total_limit,
-            load_best_model_at_end=self.eval_dataset is not None,
+            load_best_model_at_end=(
+                self.eval_dataset is not None
+                and self.args.save_strategy == self.args.eval_strategy
+            ),
 
             # Logging
             logging_steps=self.args.logging_steps,

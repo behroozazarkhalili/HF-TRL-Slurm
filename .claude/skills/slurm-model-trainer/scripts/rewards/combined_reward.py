@@ -6,6 +6,7 @@ allowing flexible reward shaping for different training objectives.
 """
 
 import re
+import traceback
 from typing import Dict, List, Optional
 
 from .base import RewardFunction
@@ -88,8 +89,12 @@ class CombinedRewardFunction(RewardFunction):
             try:
                 reward = self._compute_single(completion, prompt)
                 rewards.append(reward)
+            except (ValueError, TypeError, AttributeError) as e:
+                print(f"[CombinedReward] Graceful fallback for: {type(e).__name__}: {e}")
+                rewards.append(0.0)
             except Exception as e:
-                print(f"Combined reward computation error: {e}")
+                traceback.print_exc()
+                print(f"[CombinedReward] UNEXPECTED error — this may indicate a bug: {e}")
                 rewards.append(0.0)
 
         return rewards
@@ -133,15 +138,17 @@ class CombinedRewardFunction(RewardFunction):
             if pred_norm == gt_norm:
                 return 1.0
 
-            if pred_norm in gt_norm or gt_norm in pred_norm:
-                return 0.7
-
-            # Numerical comparison
+            # Numerical comparison first (prevents "1" in "10" false positive)
             pred_num = _try_parse_number(pred_norm)
             gt_num = _try_parse_number(gt_norm)
             if pred_num is not None and gt_num is not None:
                 if abs(pred_num - gt_num) < 1e-6:
                     return 1.0
+                return 0.0  # Both numeric but different — no partial credit
+
+            # Substring match only for non-numeric answers
+            if pred_norm in gt_norm or gt_norm in pred_norm:
+                return 0.7
 
             return 0.0
 

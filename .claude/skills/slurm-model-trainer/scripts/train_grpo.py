@@ -56,6 +56,7 @@ Usage:
 import os
 import argparse
 import re
+import traceback
 from typing import Optional, List, Dict, Any
 
 import torch
@@ -76,10 +77,24 @@ def _prompt_key(prompt: str) -> str:
     Strips whitespace and chat template tokens to ensure ground truth stored
     during dataset loading can be found during reward computation, even if
     TRL applies a chat template wrapper to the prompt.
+
+    Handles tokens from multiple model families:
+    - Qwen: <|im_start|>, <|im_end|>, <|endoftext|>
+    - Llama/Mistral: <s>, </s>, [INST], [/INST], <<SYS>>, <</SYS>>
+    - Gemma: <start_of_turn>, <end_of_turn>, <bos>, <eos>
+    - ChatML: <|system|>, <|user|>, <|assistant|>
     """
-    import re
-    # Strip common chat template tokens
+    # Qwen-style: <|...|>
     key = re.sub(r'<\|[^|]*\|>', '', prompt)
+    # Llama/Mistral-style: [INST], [/INST], <<SYS>>, <</SYS>>
+    key = re.sub(r'\[/?INST\]', '', key)
+    key = re.sub(r'<<?/?SYS>?>?', '', key)
+    # Gemma-style: <start_of_turn>, <end_of_turn>, <bos>, <eos>
+    key = re.sub(r'<(?:start_of_turn|end_of_turn|bos|eos)>', '', key)
+    # Generic BOS/EOS: <s>, </s>
+    key = re.sub(r'</?s>', '', key)
+    # Role labels left by chat templates
+    key = re.sub(r'^(system|user|model|assistant)\n', '', key, flags=re.MULTILINE)
     return key.strip()
 
 # Try to import trackio
@@ -206,10 +221,12 @@ def parse_args():
                         help="Enable vLLM sleep mode - offloads vLLM params to CPU during optimization step")
     parser.add_argument("--use_liger_kernel", action="store_true",
                         help="Use Liger Kernel to reduce memory by ~60%% and increase throughput by ~20%%")
-    parser.add_argument("--ds3_gather_for_generation", action="store_true", default=True,
-                        help="Gather model weights for generation in DeepSpeed ZeRO-3 (disable to prevent OOM)")
-    parser.add_argument("--no_ds3_gather_for_generation", action="store_false", dest="ds3_gather_for_generation",
-                        help="Disable gathering model weights for generation (prevents OOM but slower)")
+    parser.add_argument("--ds3_gather_for_generation", action=argparse.BooleanOptionalAction, default=True,
+                        help="Gather model weights for generation in DeepSpeed ZeRO-3 (use --no-ds3_gather_for_generation to disable)")
+
+    # Resume training
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None,
+                        help="Path to checkpoint directory to resume training from")
 
     return parser.parse_args()
 
@@ -233,12 +250,19 @@ def load_model_and_tokenizer(args):
     elif args.use_8bit:
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
+    # device_map="auto" is incompatible with DeepSpeed / multi-GPU accelerate.
+    # When accelerate handles distribution, we must NOT set device_map.
+    use_device_map = (
+        not os.environ.get("ACCELERATE_USE_DEEPSPEED")
+        and int(os.environ.get("WORLD_SIZE", "1")) <= 1
+    )
+
     # Load model
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
         quantization_config=quantization_config,
         torch_dtype=compute_dtype,
-        device_map="auto",
+        device_map="auto" if use_device_map else None,
         trust_remote_code=True,
     )
 
@@ -635,6 +659,44 @@ def _try_parse_number(s: str) -> Optional[float]:
     return None
 
 
+def _normalize_completions(items: list) -> list:
+    """Normalize TRL completions to plain strings.
+
+    TRL passes List[str] for non-conversational datasets or
+    List[List[Dict]] for conversational datasets (assistant is first message).
+    """
+    if not items:
+        return []
+    first = items[0]
+    if isinstance(first, list):
+        return [
+            i[0]["content"] if i and isinstance(i[0], dict) else str(i)
+            for i in items
+        ]
+    if isinstance(first, str):
+        return items
+    return [str(i) for i in items]
+
+
+def _normalize_prompts(items: list) -> list:
+    """Normalize TRL prompts to plain strings.
+
+    TRL passes List[str] for non-conversational datasets or
+    List[List[Dict]] for conversational datasets (user message is last turn).
+    """
+    if not items:
+        return []
+    first = items[0]
+    if isinstance(first, list):
+        return [
+            i[-1]["content"] if i and isinstance(i[-1], dict) else str(i)
+            for i in items
+        ]
+    if isinstance(first, str):
+        return items
+    return [str(i) for i in items]
+
+
 def create_reward_function(reward_type: str):
     """Create reward function based on type.
 
@@ -649,6 +711,8 @@ def create_reward_function(reward_type: str):
     if reward_type == "combined":
         # Combined reward: math accuracy (50%) + format (25%) + length (15%) + reasoning (10%)
         def reward_fn(completions, prompts, **kwargs):
+            completions = _normalize_completions(completions)
+            prompts = _normalize_prompts(prompts)
             rewards = []
             for completion, prompt in zip(completions, prompts):
                 try:
@@ -666,14 +730,16 @@ def create_reward_function(reward_type: str):
 
                         if pred_norm == gt_norm:
                             accuracy_score = 1.0  # Exact match
-                        elif pred_norm in gt_norm or gt_norm in pred_norm:
-                            accuracy_score = 0.7  # Partial match
                         else:
+                            # Numeric comparison first (prevents "1" in "10" false positive)
                             pred_num = _try_parse_number(pred_norm)
                             gt_num = _try_parse_number(gt_norm)
                             if pred_num is not None and gt_num is not None:
                                 if abs(pred_num - gt_num) < 1e-6:
                                     accuracy_score = 1.0  # Numerically equal
+                                # else: both numeric but different — 0.0, no partial credit
+                            elif pred_norm in gt_norm or gt_norm in pred_norm:
+                                accuracy_score = 0.7  # Partial match (non-numeric only)
                     elif predicted_answer:
                         accuracy_score = 0.3  # Has answer but no ground truth
 
@@ -722,8 +788,12 @@ def create_reward_function(reward_type: str):
                              reasoning_score * 0.10)
 
                     rewards.append(score)
+                except (ValueError, TypeError, AttributeError) as e:
+                    print(f"[CombinedReward] Graceful fallback: {type(e).__name__}: {e}")
+                    rewards.append(0.0)
                 except Exception as e:
-                    print(f"Reward computation error: {e}")
+                    traceback.print_exc()
+                    print(f"[CombinedReward] UNEXPECTED error — possible bug: {e}")
                     rewards.append(0.0)
             return rewards
         return reward_fn
@@ -731,6 +801,8 @@ def create_reward_function(reward_type: str):
     elif reward_type == "accuracy" or reward_type == "math":
         # Math accuracy reward - extracts and compares final answers
         def reward_fn(completions, prompts, **kwargs):
+            completions = _normalize_completions(completions)
+            prompts = _normalize_prompts(prompts)
             rewards = []
             for completion, prompt in zip(completions, prompts):
                 try:
@@ -748,14 +820,17 @@ def create_reward_function(reward_type: str):
 
                         if pred_norm == gt_norm:
                             rewards.append(1.0)  # Exact match
-                        elif pred_norm in gt_norm or gt_norm in pred_norm:
-                            rewards.append(0.7)  # Partial match
                         else:
-                            # Check if both are numbers and approximately equal
+                            # Numeric comparison first (prevents "1" in "10" false positive)
                             pred_num = _try_parse_number(pred_norm)
                             gt_num = _try_parse_number(gt_norm)
-                            if pred_num is not None and gt_num is not None and abs(pred_num - gt_num) < 1e-6:
-                                rewards.append(1.0)  # Numerically equal
+                            if pred_num is not None and gt_num is not None:
+                                if abs(pred_num - gt_num) < 1e-6:
+                                    rewards.append(1.0)  # Numerically equal
+                                else:
+                                    rewards.append(0.0)  # Both numeric but different
+                            elif pred_norm in gt_norm or gt_norm in pred_norm:
+                                rewards.append(0.7)  # Partial match (non-numeric only)
                             else:
                                 rewards.append(0.0)
                     elif predicted_answer:
@@ -771,8 +846,12 @@ def create_reward_function(reward_type: str):
                             rewards.append(0.1)  # At least attempted reasoning
                         else:
                             rewards.append(0.0)
+                except (ValueError, TypeError, AttributeError) as e:
+                    print(f"[MathReward] Graceful fallback: {type(e).__name__}: {e}")
+                    rewards.append(0.0)
                 except Exception as e:
-                    print(f"Reward computation error: {e}")
+                    traceback.print_exc()
+                    print(f"[MathReward] UNEXPECTED error — possible bug: {e}")
                     rewards.append(0.0)
             return rewards
         return reward_fn
@@ -780,6 +859,7 @@ def create_reward_function(reward_type: str):
     elif reward_type == "length":
         # Simple length-based reward (prefer longer, detailed responses)
         def reward_fn(completions, prompts, **kwargs):
+            completions = _normalize_completions(completions)
             rewards = []
             for completion in completions:
                 length = len(completion.split())
@@ -797,6 +877,7 @@ def create_reward_function(reward_type: str):
     elif reward_type == "format":
         # Reward for proper formatting (boxed answer, step-by-step)
         def reward_fn(completions, prompts, **kwargs):
+            completions = _normalize_completions(completions)
             rewards = []
             for completion in completions:
                 score = 0.0
@@ -816,6 +897,7 @@ def create_reward_function(reward_type: str):
     else:
         # Default: return neutral reward
         def reward_fn(completions, prompts, **kwargs):
+            completions = _normalize_completions(completions)
             return [0.5] * len(completions)
         return reward_fn
 
@@ -845,6 +927,10 @@ def main():
     print("=" * 60)
     print(f"Number of generations: {args.num_generations}")
     print(f"Reward type: {args.reward_type}")
+
+    # Validate push_to_hub requires hub_model_id
+    if args.push_to_hub and not args.hub_model_id:
+        raise ValueError("--push_to_hub requires --hub_model_id to be set")
 
     print_gpu_diagnostics()
 
@@ -911,6 +997,7 @@ def main():
         learning_rate=args.learning_rate,
         weight_decay=args.weight_decay,
         warmup_ratio=args.warmup_ratio,
+        lr_scheduler_type="cosine",
 
         # Precision (args already corrected by auto-detection above)
         bf16=args.bf16,
@@ -918,6 +1005,8 @@ def main():
 
         # Gradient checkpointing
         gradient_checkpointing=args.gradient_checkpointing,
+        gradient_checkpointing_kwargs={"use_reentrant": False}
+            if args.gradient_checkpointing else None,
 
         # TRL Memory Release Techniques
         # See: https://huggingface.co/docs/trl/reducing_memory_usage
@@ -935,6 +1024,7 @@ def main():
 
         # Logging
         logging_steps=args.logging_steps,
+        logging_first_step=True,
         # Don't pass trackio to Trainer - we handle it manually with local logging
         report_to=[] if args.report_to in ["none", "trackio"] else [args.report_to],
         run_name=args.run_name,
@@ -943,6 +1033,10 @@ def main():
         push_to_hub=args.push_to_hub,
         hub_model_id=args.hub_model_id,
         hub_strategy=args.hub_strategy,
+
+        # Other
+        dataloader_pin_memory=True,
+        dataloader_num_workers=4,
     )
 
     # Create trainer
@@ -958,7 +1052,9 @@ def main():
     # Train
     print("\nStarting GRPO training...")
     print("Note: GRPO is online RL - model generates responses during training")
-    train_result = trainer.train()
+    if args.resume_from_checkpoint:
+        print(f"Resuming from checkpoint: {args.resume_from_checkpoint}")
+    train_result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
 
     # Save final model
     print("\nSaving final model...")

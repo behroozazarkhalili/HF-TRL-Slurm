@@ -95,6 +95,18 @@ def validate_config(config: dict) -> ValidationResult:
             errors.append(f"Missing required field: {field_name}")
 
     # =========================================================================
+    # Job name shell-safety validation
+    # =========================================================================
+    job_name = config.get("job_name", "")
+    if job_name:
+        # Only allow alphanumeric, hyphens, underscores, dots
+        if re.search(r"[^a-zA-Z0-9\-_.]", job_name):
+            errors.append(
+                f"job_name contains unsafe characters: {job_name!r} "
+                f"(only alphanumeric, hyphens, underscores, dots allowed)"
+            )
+
+    # =========================================================================
     # Model size validation
     # =========================================================================
     params_b = config.get("params_b", 0)
@@ -185,12 +197,12 @@ def validate_config(config: dict) -> ValidationResult:
     # Streaming validation
     # =========================================================================
     if config.get("streaming"):
-        max_samples = config.get("max_samples", 0)
+        max_samples = config.get("max_samples") or 0
 
-        if max_samples <= 0:
+        if not max_samples or max_samples <= 0:
             errors.append("Streaming enabled but max_samples not set or invalid")
 
-        if max_samples > 1_000_000:
+        if isinstance(max_samples, (int, float)) and max_samples > 1_000_000:
             warnings.append(
                 f"max_samples={max_samples:,} is very large; may take a long time"
             )

@@ -6,6 +6,7 @@ Extracts answers from completions and compares with ground truth.
 """
 
 import re
+import traceback
 from typing import Dict, List, Optional
 
 from .base import RewardFunction
@@ -158,8 +159,25 @@ def _prompt_key(prompt: str) -> str:
     Strips whitespace and chat template tokens to ensure ground truth stored
     during dataset loading can be found during reward computation, even if
     TRL applies a chat template wrapper to the prompt.
+
+    Handles tokens from multiple model families:
+    - Qwen: <|im_start|>, <|im_end|>, <|endoftext|>
+    - Llama/Mistral: <s>, </s>, [INST], [/INST], <<SYS>>, <</SYS>>
+    - Gemma: <start_of_turn>, <end_of_turn>, <bos>, <eos>
+    - ChatML: <|system|>, <|user|>, <|assistant|>
+    - Generic: <|...|>, [ROLE], etc.
     """
+    # Qwen-style: <|...|>
     key = re.sub(r'<\|[^|]*\|>', '', prompt)
+    # Llama/Mistral-style: [INST], [/INST], <<SYS>>, <</SYS>>
+    key = re.sub(r'\[/?INST\]', '', key)
+    key = re.sub(r'<<?/?SYS>?>?', '', key)
+    # Gemma-style: <start_of_turn>, <end_of_turn>, <bos>, <eos>
+    key = re.sub(r'<(?:start_of_turn|end_of_turn|bos|eos)>', '', key)
+    # Generic BOS/EOS: <s>, </s>
+    key = re.sub(r'</?s>', '', key)
+    # Role labels left by chat templates (e.g., "user\n", "model\n", "assistant\n")
+    key = re.sub(r'^(system|user|model|assistant)\n', '', key, flags=re.MULTILINE)
     return key.strip()
 
 
@@ -217,8 +235,14 @@ class MathRewardFunction(RewardFunction):
             try:
                 reward = self._compute_single(completion, prompt)
                 rewards.append(reward)
+            except (ValueError, TypeError, AttributeError) as e:
+                # Expected edge cases: malformed input, None values, wrong types
+                print(f"[MathReward] Graceful fallback for: {type(e).__name__}: {e}")
+                rewards.append(0.0)
             except Exception as e:
-                print(f"Reward computation error: {e}")
+                # Unexpected error — log full traceback so bugs are visible
+                traceback.print_exc()
+                print(f"[MathReward] UNEXPECTED error — this may indicate a bug: {e}")
                 rewards.append(0.0)
 
         return rewards
@@ -248,15 +272,17 @@ class MathRewardFunction(RewardFunction):
             if pred_norm == gt_norm:
                 return 1.0  # Exact match
 
-            if pred_norm in gt_norm or gt_norm in pred_norm:
-                return 0.7  # Partial match
-
-            # Check if both are numbers and approximately equal
+            # Numerical comparison (before substring to avoid "1" in "10" false positives)
             pred_num = _try_parse_number(pred_norm)
             gt_num = _try_parse_number(gt_norm)
             if pred_num is not None and gt_num is not None:
                 if abs(pred_num - gt_num) < 1e-6:
                     return 1.0  # Numerically equal
+                return 0.0  # Both numeric but different — no partial credit
+
+            # Substring match only for non-numeric answers (e.g., symbolic expressions)
+            if pred_norm in gt_norm or gt_norm in pred_norm:
+                return 0.7  # Partial match
 
             return 0.0  # No match
 

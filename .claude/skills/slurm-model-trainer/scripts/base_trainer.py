@@ -159,6 +159,10 @@ class BaseTrainerScript(ABC):
         # Parse arguments
         self.args = self._parse_args()
 
+        # Validate push_to_hub requires hub_model_id
+        if self.args.push_to_hub and not self.args.hub_model_id:
+            raise ValueError("--push_to_hub requires --hub_model_id to be set")
+
         # Print header
         self._print_header()
 
@@ -179,8 +183,11 @@ class BaseTrainerScript(ABC):
         trainer = self.create_trainer()
 
         # Train
+        resume_ckpt = getattr(self.args, "resume_from_checkpoint", None)
         print(f"\nStarting {self.get_method_name()} training...")
-        train_result = trainer.train()
+        if resume_ckpt:
+            print(f"Resuming from checkpoint: {resume_ckpt}")
+        train_result = trainer.train(resume_from_checkpoint=resume_ckpt)
 
         # Save final model
         print("\nSaving final model...")
@@ -479,6 +486,10 @@ class BaseTrainerScript(ABC):
             "--optim", type=str, default="adamw_torch",
             help="Optimizer to use"
         )
+        parser.add_argument(
+            "--resume_from_checkpoint", type=str, default=None,
+            help="Path to checkpoint directory to resume training from"
+        )
 
         # Add method-specific arguments
         self.add_method_specific_args(parser)
@@ -494,7 +505,7 @@ class BaseTrainerScript(ABC):
         print(f"Loading model: {self.args.model_name_or_path}")
 
         # Auto-detect precision: bf16 may not be available on some MIG partitions
-        if self.args.bf16 and not torch.cuda.is_bf16_supported():
+        if self.args.bf16 and not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
             print("WARNING: bf16 requested but not supported on this GPU. Falling back to fp16.")
             self.args.bf16 = False
             self.args.fp16 = True
@@ -520,12 +531,19 @@ class BaseTrainerScript(ABC):
         else:
             dtype = torch.float32
 
+        # device_map="auto" is incompatible with DeepSpeed / multi-GPU accelerate.
+        # When accelerate handles distribution, we must NOT set device_map.
+        use_device_map = (
+            not os.environ.get("ACCELERATE_USE_DEEPSPEED")
+            and int(os.environ.get("WORLD_SIZE", "1")) <= 1
+        )
+
         # Load model
         model = AutoModelForCausalLM.from_pretrained(
             self.args.model_name_or_path,
             quantization_config=quantization_config,
             torch_dtype=dtype,
-            device_map="auto",
+            device_map="auto" if use_device_map else None,
             trust_remote_code=True,
         )
 

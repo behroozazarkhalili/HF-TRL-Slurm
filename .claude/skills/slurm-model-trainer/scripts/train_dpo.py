@@ -141,6 +141,10 @@ def parse_args():
     parser.add_argument("--hub_strategy", type=str, default="end",
                         help="Hub push strategy (end=push best model only)")
 
+    # Resume training
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None,
+                        help="Path to checkpoint directory to resume training from")
+
     # Logging arguments
     parser.add_argument("--logging_steps", type=int, default=10,
                         help="Logging frequency in steps")
@@ -188,12 +192,18 @@ def load_model_and_tokenizer(args):
     elif args.use_8bit:
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
+    # device_map="auto" is incompatible with DeepSpeed / multi-GPU accelerate.
+    use_device_map = (
+        not os.environ.get("ACCELERATE_USE_DEEPSPEED")
+        and int(os.environ.get("WORLD_SIZE", "1")) <= 1
+    )
+
     # Load model
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
         quantization_config=quantization_config,
         torch_dtype=compute_dtype,
-        device_map="auto",
+        device_map="auto" if use_device_map else None,
         trust_remote_code=True,
     )
 
@@ -241,17 +251,30 @@ def load_and_prepare_dataset(args):
 
         def map_columns(example):
             result = {}
+            mapped_from = {}
             for target, sources in column_mappings.items():
                 if target in example:
                     result[target] = example[target]
+                    mapped_from[target] = target
                 else:
                     for source in sources:
                         if source in example:
                             result[target] = example[source]
+                            mapped_from[target] = source
                             break
             return result
 
         dataset = dataset.map(map_columns, remove_columns=dataset.column_names)
+
+        # Post-validation: check mapped columns have non-empty content
+        sample = dataset[0]
+        unmapped = [col for col in required_columns if col not in sample or sample[col] == ""]
+        if unmapped:
+            raise ValueError(
+                f"Could not map required DPO columns: {unmapped}. "
+                f"Dataset must have 'prompt', 'chosen', 'rejected' columns "
+                f"or compatible alternatives."
+            )
 
     # Limit samples
     if args.max_samples is not None:
@@ -291,6 +314,10 @@ def main():
     print("=" * 60)
     print(f"Beta (KL penalty): {args.beta}")
     print(f"Loss type: {args.loss_type}")
+
+    # Validate push_to_hub requires hub_model_id
+    if args.push_to_hub and not args.hub_model_id:
+        raise ValueError("--push_to_hub requires --hub_model_id to be set")
 
     # Initialize tracking (logs locally by default, set space_id for HF Space)
     if args.report_to == "trackio" and TRACKIO_AVAILABLE:
@@ -351,6 +378,8 @@ def main():
 
         # Gradient checkpointing
         gradient_checkpointing=args.gradient_checkpointing,
+        gradient_checkpointing_kwargs={"use_reentrant": False}
+            if args.gradient_checkpointing else None,
 
         # Evaluation
         eval_strategy=args.eval_strategy if eval_dataset is not None else "no",
@@ -360,10 +389,14 @@ def main():
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,
         save_total_limit=args.save_total_limit,
-        load_best_model_at_end=True if eval_dataset is not None else False,
+        load_best_model_at_end=(
+            eval_dataset is not None
+            and args.save_strategy == args.eval_strategy
+        ),
 
         # Logging
         logging_steps=args.logging_steps,
+        logging_first_step=True,
         # Don't pass trackio to Trainer - we handle it manually with local logging
         report_to=[] if args.report_to in ["none", "trackio"] else [args.report_to],
         run_name=args.run_name,
@@ -375,6 +408,8 @@ def main():
 
         # Other
         remove_unused_columns=False,
+        dataloader_pin_memory=True,
+        dataloader_num_workers=4,
     )
 
     # Create trainer
@@ -389,7 +424,9 @@ def main():
 
     # Train
     print("\nStarting DPO training...")
-    train_result = trainer.train()
+    if args.resume_from_checkpoint:
+        print(f"Resuming from checkpoint: {args.resume_from_checkpoint}")
+    train_result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
 
     # Save final model
     print("\nSaving final model...")
