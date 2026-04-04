@@ -137,6 +137,8 @@ def parse_args():
     parser.add_argument("--reward_type", type=str, default="combined",
                         choices=["accuracy", "math", "length", "format", "combined", "custom"],
                         help="Type of reward function. 'combined' uses math+accuracy+length+format together (default)")
+    parser.add_argument("--disable_thinking", action="store_true", default=None,
+                        help="Disable thinking mode (auto-detected for Qwen3 models)")
 
     # LoRA arguments
     parser.add_argument("--lora_r", type=int, default=16,
@@ -1037,6 +1039,18 @@ def main():
     # so no auto-downgrade to 'math' — combined is strictly better for math datasets
     # as it also rewards format, length, and reasoning quality.
 
+    # Auto-detect thinking mode for Qwen3 models
+    # Qwen3 has thinking mode enabled by default which generates hidden <think>
+    # tokens that fill max_completion_length without ever emitting EOS.
+    # This causes 100% clipped completions and zero learning signal.
+    if args.disable_thinking is None:
+        model_lower = args.model_name_or_path.lower()
+        if "qwen3" in model_lower and "qwen3.5" not in model_lower:
+            args.disable_thinking = True
+            print("Auto-detected Qwen3 model: disabling thinking mode (enable_thinking=False)")
+        else:
+            args.disable_thinking = False
+
     # Create LoRA config
     peft_config = create_peft_config(args)
 
@@ -1097,6 +1111,10 @@ def main():
         push_to_hub=args.push_to_hub,
         hub_model_id=args.hub_model_id,
         hub_strategy=args.hub_strategy,
+
+        # Thinking mode control (Qwen3 auto-detected)
+        **({"chat_template_kwargs": {"enable_thinking": False}}
+           if args.disable_thinking else {}),
 
         # Other
         dataloader_pin_memory=not is_mig_gpu(),
