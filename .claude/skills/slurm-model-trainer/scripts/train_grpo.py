@@ -335,14 +335,31 @@ def load_and_prepare_dataset(args):
                     answer = extract_answer(solution)
                     if answer:
                         GROUND_TRUTH_ANSWERS[_prompt_key(prompt)] = answer
+            elif "DAPO" in args.dataset_name or "dapo" in args.dataset_name.lower():
+                # Handle open-r1/DAPO-Math-17k-Processed: ground truth in reward_model.ground_truth
+                prompt = example.get("prompt", "")
+                reward_model = example.get("reward_model", {})
+                if isinstance(reward_model, dict):
+                    answer = reward_model.get("ground_truth", "")
+                else:
+                    answer = ""
+                if prompt and answer:
+                    GROUND_TRUTH_ANSWERS[_prompt_key(prompt)] = str(answer)
             else:
-                # Generic handling — try to extract answer from 'solution' field if present
+                # Generic handling — try multiple extraction strategies
                 prompt = example.get("prompt") or example.get("problem") or example.get("question") or ""
-                solution = example.get("solution", "")
-                if prompt and solution:
-                    answer = extract_answer(solution)
-                    if answer:
-                        GROUND_TRUTH_ANSWERS[_prompt_key(prompt)] = answer
+                # Try reward_model.ground_truth first (TRL GRPO format)
+                reward_model = example.get("reward_model", {})
+                answer = ""
+                if isinstance(reward_model, dict):
+                    answer = reward_model.get("ground_truth", "")
+                # Fall back to extracting from solution field
+                if not answer:
+                    solution = example.get("solution", "")
+                    if solution:
+                        answer = extract_answer(solution)
+                if prompt and answer:
+                    GROUND_TRUTH_ANSWERS[_prompt_key(prompt)] = str(answer)
 
             # Skip empty/whitespace-only prompts
             if prompt and prompt.strip():
@@ -440,6 +457,29 @@ def load_and_prepare_dataset(args):
             if "problem" in dataset.column_names and "prompt" not in dataset.column_names:
                 dataset = dataset.rename_column("problem", "prompt")
                 print("Renamed 'problem' to 'prompt'")
+
+            # Keep only prompt column
+            columns_to_remove = [col for col in dataset.column_names if col != "prompt"]
+            if columns_to_remove:
+                dataset = dataset.remove_columns(columns_to_remove)
+                print(f"Removed columns: {columns_to_remove}")
+
+        # Handle DAPO-Math format: ground truth in reward_model.ground_truth
+        elif "DAPO" in args.dataset_name or "dapo" in args.dataset_name.lower():
+            print("Detected DAPO-Math dataset format")
+
+            # Extract ground truth from reward_model.ground_truth
+            if "reward_model" in dataset.column_names:
+                for example in dataset:
+                    prompt = example.get("prompt", "")
+                    reward_model = example.get("reward_model", {})
+                    if isinstance(reward_model, dict):
+                        answer = reward_model.get("ground_truth", "")
+                    else:
+                        answer = ""
+                    if prompt and answer:
+                        GROUND_TRUTH_ANSWERS[_prompt_key(prompt)] = str(answer)
+                print(f"Stored {len(GROUND_TRUTH_ANSWERS)} ground truth answers")
 
             # Keep only prompt column
             columns_to_remove = [col for col in dataset.column_names if col != "prompt"]
