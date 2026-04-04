@@ -7,7 +7,7 @@
 
 #SBATCH --job-name=test-qwen2.5-0.5b-grpo-numina
 #SBATCH --account=def-maxwl_gpu
-#SBATCH --time=0-10:00:00
+#SBATCH --time=0-02:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -67,11 +67,11 @@ export HF_HOME=$SCRATCH/.cache/huggingface
 export TRANSFORMERS_CACHE=$HF_HOME/hub
 export OUTPUT_DIR=$SCRATCH/outputs/test-qwen2.5-0.5b-grpo-numina-$SLURM_JOB_ID
 
-# Fix MIG pin_memory: ensure PyTorch dataloader workers see the GPU
-if [[ -z "$CUDA_VISIBLE_DEVICES" ]]; then
-    export CUDA_VISIBLE_DEVICES=0
+# Log MIG status for debugging (training script handles pin_memory auto-detection)
+echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+if [[ "$CUDA_VISIBLE_DEVICES" == MIG* ]]; then
+    echo "MIG device detected — training script will auto-handle pin_memory and bf16"
 fi
-export CUDA_DEVICE_ORDER=PCI_BUS_ID
 
 # Load HF token
 if [[ -f "/project/6014832/ermia/HF-TRL/.env" ]]; then

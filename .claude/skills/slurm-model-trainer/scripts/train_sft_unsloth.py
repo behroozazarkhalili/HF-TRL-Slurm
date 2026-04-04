@@ -59,17 +59,11 @@ except ImportError:
 
 
 def _is_mig() -> bool:
-    """Detect MIG GPU — disable pin_memory to avoid 12x slowdown."""
-    if not torch.cuda.is_available():
-        return False
-    try:
-        p = torch.cuda.get_device_properties(0)
-        if "mig" in p.name.lower():
-            return True
-        if "h100" in p.name.lower() and p.total_mem / 1024**3 < 60:
-            return True
-    except Exception:
-        pass
+    """Detect broken MIG node where PyTorch can't see the GPU."""
+    import os
+    cuda_dev = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+    if "MIG" in cuda_dev.upper() and not torch.cuda.is_available():
+        return True
     return False
 
 
@@ -263,8 +257,10 @@ def main():
 
     # Auto-detect precision BEFORE loading model
     if args.bf16:
-        if not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
-            print("WARNING: bf16 requested but not supported on this GPU. Falling back to fp16.")
+        if _is_mig():
+            print("MIG detected (torch.cuda unavailable): keeping bf16 (H100 supports bf16)")
+        elif not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
+            print("WARNING: bf16 not supported, falling back to fp16")
             args.bf16 = False
 
     # Initialize tracking (logs locally by default, set space_id for HF Space)

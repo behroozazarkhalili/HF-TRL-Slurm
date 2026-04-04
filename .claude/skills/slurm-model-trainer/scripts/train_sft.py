@@ -49,17 +49,16 @@ except ImportError:
 
 
 def _is_mig() -> bool:
-    """Detect MIG GPU — disable pin_memory to avoid 12x slowdown."""
-    if not torch.cuda.is_available():
-        return False
-    try:
-        p = torch.cuda.get_device_properties(0)
-        if "mig" in p.name.lower():
-            return True
-        if "h100" in p.name.lower() and p.total_mem / 1024**3 < 60:
-            return True
-    except Exception:
-        pass
+    """Detect broken MIG node where PyTorch can't see the GPU.
+
+    On some nodes, SLURM sets CUDA_VISIBLE_DEVICES to a MIG UUID that
+    PyTorch can't parse. Returns True only on those broken nodes so
+    pin_memory gets disabled. On working MIG nodes, returns False.
+    """
+    import os
+    cuda_dev = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+    if "MIG" in cuda_dev.upper() and not torch.cuda.is_available():
+        return True
     return False
 
 
@@ -182,11 +181,14 @@ def load_model_and_tokenizer(args):
     """Load model and tokenizer with optional quantization."""
     print(f"Loading model: {args.model_name_or_path}")
 
-    # Auto-detect precision: bf16 may not be available on some MIG partitions
-    if args.bf16 and not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
-        print("WARNING: bf16 requested but not supported on this GPU. Falling back to fp16.")
-        args.bf16 = False
-        args.fp16 = True
+    # Auto-detect precision
+    if args.bf16:
+        if _is_mig():
+            print("MIG detected (torch.cuda unavailable): keeping bf16 (H100 supports bf16)")
+        elif not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
+            print("WARNING: bf16 not supported, falling back to fp16")
+            args.bf16 = False
+            args.fp16 = True
 
     compute_dtype = torch.bfloat16 if args.bf16 else torch.float16 if args.fp16 else torch.float32
 

@@ -44,25 +44,24 @@ from transformers import (
 )
 
 def is_mig_gpu() -> bool:
-    """Detect if running on an NVIDIA MIG (Multi-Instance GPU) partition.
+    """Detect MIG where PyTorch can't see the GPU (broken CUDA driver).
 
-    MIG slices cause pin_memory failures in PyTorch dataloader workers
-    because the subprocess can't see the GPU. Returns True on MIG so
-    callers can disable pin_memory to avoid a ~12x slowdown.
+    On some MIG nodes, SLURM sets CUDA_VISIBLE_DEVICES to a MIG UUID
+    that PyTorch can't parse, causing torch.cuda.is_available()=False.
+    This breaks pin_memory and bf16 detection.
+
+    Returns True only when: (1) env var contains MIG UUID AND (2) torch
+    can't see the GPU. On working MIG nodes (torch works), returns False
+    so pin_memory stays enabled for best performance.
     """
-    if not torch.cuda.is_available():
-        return False
-    try:
-        props = torch.cuda.get_device_properties(0)
-        name = props.name.lower()
-        if "mig" in name:
-            return True
-        # Heuristic: H100 with <60GB is likely a MIG slice (full = 80GB)
-        total_gb = props.total_mem / 1024**3
-        if "h100" in name and total_gb < 60:
-            return True
-    except Exception:
-        pass
+    cuda_dev = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+    is_mig_env = "MIG" in cuda_dev.upper()
+
+    if is_mig_env and not torch.cuda.is_available():
+        # Broken MIG node — torch can't parse the UUID
+        return True
+
+    # Working node (MIG or full GPU) — torch.cuda works fine
     return False
 
 
@@ -527,11 +526,14 @@ class BaseTrainerScript(ABC):
         """
         print(f"Loading model: {self.args.model_name_or_path}")
 
-        # Auto-detect precision: bf16 may not be available on some MIG partitions
-        if self.args.bf16 and not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
-            print("WARNING: bf16 requested but not supported on this GPU. Falling back to fp16.")
-            self.args.bf16 = False
-            self.args.fp16 = True
+        # Auto-detect precision: bf16 may not be available on some GPUs
+        if self.args.bf16:
+            if is_mig_gpu():
+                print("MIG detected (torch.cuda unavailable): keeping bf16 (H100 supports bf16)")
+            elif not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
+                print("WARNING: bf16 not supported, falling back to fp16")
+                self.args.bf16 = False
+                self.args.fp16 = True
 
         # Quantization config
         compute_dtype = torch.bfloat16 if self.args.bf16 else torch.float16 if self.args.fp16 else torch.float32
