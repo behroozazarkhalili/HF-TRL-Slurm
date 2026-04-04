@@ -1066,6 +1066,7 @@ def main():
         num_generations=args.num_generations,
         max_completion_length=args.max_completion_length,
         max_prompt_length=args.max_prompt_length,
+        temperature=0.7,
 
         # Training hyperparameters
         num_train_epochs=args.num_train_epochs,

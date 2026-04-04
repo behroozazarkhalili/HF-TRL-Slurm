@@ -696,8 +696,9 @@ def get_defaults(
         'estimated_vram': round(vram_estimate, 1),
         'partition': select_partition(SIZE_DEFAULTS[size]['time_limit'][method]),
 
-        # Sequence lengths
-        'max_length': max_length,
+        # Sequence lengths — cap GRPO completion length for small/medium models
+        # Small transformers can't self-terminate in 2048 tokens (100% clipped)
+        'max_length': min(max_length, 512) if method == 'grpo' and size in ('small', 'medium') else max_length,
         'max_prompt_length': max_prompt_length,
     }
 
