@@ -274,10 +274,31 @@ def load_model_and_tokenizer(args):
         trust_remote_code=True,
     )
 
-    # Set padding token
+    # Set padding token — MUST NOT overlap with eos_token_id
+    # Qwen3 has pad_token_id=151643 which is also in eos_token_id=[151645, 151643].
+    # When pad=eos, TRL masks out EOS during generation → model never terminates.
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         model.config.pad_token_id = tokenizer.eos_token_id
+
+    # Fix pad/eos collision: if pad_token_id is in eos_token_id list, use a different pad
+    eos_ids = model.config.eos_token_id
+    if isinstance(eos_ids, list):
+        if tokenizer.pad_token_id in eos_ids:
+            # Pick the first eos that ISN'T pad, or use a dedicated pad token
+            # For Qwen3: eos=[151645, 151643], pad=151643 → use 151643 as pad but
+            # remove it from eos so TRL doesn't mask it
+            # Actually the safer fix: set pad to a non-eos token entirely
+            # Use <|endoftext|> (151643) as pad only if it's NOT in eos, else use unk or a special token
+            other_eos = [e for e in eos_ids if e != tokenizer.pad_token_id]
+            if other_eos:
+                # Set eos to the non-pad eos token only (e.g., 151645 = <|im_end|>)
+                model.config.eos_token_id = other_eos[0] if len(other_eos) == 1 else other_eos
+                print(f"Fixed pad/eos collision: pad_token_id={tokenizer.pad_token_id}, "
+                      f"eos_token_id={model.config.eos_token_id} (removed overlap)")
+    elif eos_ids == tokenizer.pad_token_id:
+        print(f"WARNING: pad_token_id ({tokenizer.pad_token_id}) == eos_token_id ({eos_ids}). "
+              f"This may prevent model from generating EOS tokens.")
 
     print(f"Model loaded successfully")
 
