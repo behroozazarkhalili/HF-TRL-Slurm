@@ -39,7 +39,7 @@ from typing import Optional
 
 import torch
 from datasets import load_dataset
-from peft import LoraConfig, TaskType
+from peft import LoraConfig, PeftModel, TaskType
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from trl import DPOConfig, DPOTrainer
 
@@ -225,6 +225,14 @@ def load_model_and_tokenizer(args):
         trust_remote_code=True,
     )
 
+    # Continual training: load pre-trained adapter and merge into base weights
+    if args.continue_from_adapter:
+        print(f"\n--- Continual Training Mode ---")
+        print(f"Loading pre-trained adapter: {args.continue_from_adapter}")
+        model = PeftModel.from_pretrained(model, args.continue_from_adapter)
+        model = model.merge_and_unload()
+        print(f"Adapter merged into base weights successfully.")
+
     # Set padding token
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -330,6 +338,12 @@ def main():
     # Validate push_to_hub requires hub_model_id
     if args.push_to_hub and not args.hub_model_id:
         raise ValueError("--push_to_hub requires --hub_model_id to be set")
+
+    # Validate continual training flags
+    if args.continue_from_adapter and args.resume_from_checkpoint:
+        raise ValueError("--continue_from_adapter and --resume_from_checkpoint are mutually exclusive.")
+    if args.continue_from_adapter and args.use_4bit:
+        raise ValueError("--continue_from_adapter requires bf16 (no quantization).")
 
     # Initialize tracking (logs locally by default, set space_id for HF Space)
     if args.report_to == "trackio" and TRACKIO_AVAILABLE:
@@ -438,6 +452,9 @@ def main():
     print("\nStarting DPO training...")
     if args.resume_from_checkpoint:
         print(f"Resuming from checkpoint: {args.resume_from_checkpoint}")
+    elif args.continue_from_adapter:
+        print(f"Continual training from adapter: {args.continue_from_adapter}")
+        print(f"Training from step 0 on new data")
     train_result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
 
     # Save final model

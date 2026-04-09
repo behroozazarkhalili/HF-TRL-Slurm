@@ -61,7 +61,7 @@ from typing import Optional, List, Dict, Any
 
 import torch
 from datasets import load_dataset
-from peft import LoraConfig, TaskType
+from peft import LoraConfig, PeftModel, TaskType
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from trl import GRPOConfig, GRPOTrainer
 
@@ -226,9 +226,15 @@ def parse_args():
     parser.add_argument("--ds3_gather_for_generation", action=argparse.BooleanOptionalAction, default=True,
                         help="Gather model weights for generation in DeepSpeed ZeRO-3 (use --no-ds3_gather_for_generation to disable)")
 
-    # Resume training
+    # Resume training (same dataset, skip completed steps)
     parser.add_argument("--resume_from_checkpoint", type=str, default=None,
-                        help="Path to checkpoint directory to resume training from")
+                        help="Path to checkpoint directory to resume training from (same dataset, continues from saved step)")
+
+    # Continual training (new data, load previously trained adapter weights)
+    parser.add_argument("--continue_from_adapter", type=str, default=None,
+                        help="Path or HF repo of a trained LoRA adapter to continue training on new data. "
+                             "Loads the adapter weights as starting point but trains from step 0 on fresh data. "
+                             "Use with different --seed or dataset to train on new samples.")
 
     return parser.parse_args()
 
@@ -273,6 +279,17 @@ def load_model_and_tokenizer(args):
         args.model_name_or_path,
         trust_remote_code=True,
     )
+
+    # Continual training: load pre-trained adapter and merge into base weights
+    if args.continue_from_adapter:
+        print(f"\n--- Continual Training Mode ---")
+        print(f"Loading pre-trained adapter: {args.continue_from_adapter}")
+        print(f"Base model: {args.model_name_or_path}")
+        model = PeftModel.from_pretrained(model, args.continue_from_adapter)
+        model = model.merge_and_unload()
+        print(f"Adapter merged into base weights successfully.")
+        print(f"A fresh LoRA adapter will be applied by the trainer.")
+        print(f"Ensure --seed differs from previous run for new data samples.")
 
     # Set padding token — MUST NOT overlap with eos_token_id
     # Qwen3 has pad_token_id=151643 which is also in eos_token_id=[151645, 151643].
@@ -1016,6 +1033,19 @@ def main():
     if args.push_to_hub and not args.hub_model_id:
         raise ValueError("--push_to_hub requires --hub_model_id to be set")
 
+    # Validate continual training flags
+    if args.continue_from_adapter and args.resume_from_checkpoint:
+        raise ValueError(
+            "--continue_from_adapter and --resume_from_checkpoint are mutually exclusive.\n"
+            "  --resume_from_checkpoint: continue SAME training (same data, skip completed steps)\n"
+            "  --continue_from_adapter: start NEW training with pre-trained weights (new data, step 0)"
+        )
+    if args.continue_from_adapter and args.use_4bit:
+        raise ValueError(
+            "--continue_from_adapter requires bf16 (no quantization). "
+            "merge_and_unload() cannot merge LoRA into 4-bit quantized weights."
+        )
+
     print_gpu_diagnostics()
 
     # Auto-detect precision BEFORE loading model: bf16 may not be available on MIG partitions
@@ -1158,6 +1188,9 @@ def main():
     print("Note: GRPO is online RL - model generates responses during training")
     if args.resume_from_checkpoint:
         print(f"Resuming from checkpoint: {args.resume_from_checkpoint}")
+    elif args.continue_from_adapter:
+        print(f"Continual training from adapter: {args.continue_from_adapter}")
+        print(f"Training from step 0 on new data (seed={args.seed})")
     train_result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
 
     # Save final model

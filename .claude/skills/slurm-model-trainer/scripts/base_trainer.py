@@ -34,7 +34,7 @@ from typing import Any, Optional, Tuple
 
 import torch
 from datasets import load_dataset
-from peft import LoraConfig, TaskType
+from peft import LoraConfig, PeftModel, TaskType
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -185,6 +185,16 @@ class BaseTrainerScript(ABC):
         if self.args.push_to_hub and not self.args.hub_model_id:
             raise ValueError("--push_to_hub requires --hub_model_id to be set")
 
+        # Validate continual training flags
+        if getattr(self.args, "continue_from_adapter", None) and getattr(self.args, "resume_from_checkpoint", None):
+            raise ValueError(
+                "--continue_from_adapter and --resume_from_checkpoint are mutually exclusive."
+            )
+        if getattr(self.args, "continue_from_adapter", None) and getattr(self.args, "use_4bit", False):
+            raise ValueError(
+                "--continue_from_adapter requires bf16 (no quantization)."
+            )
+
         # Print header
         self._print_header()
 
@@ -209,6 +219,9 @@ class BaseTrainerScript(ABC):
         print(f"\nStarting {self.get_method_name()} training...")
         if resume_ckpt:
             print(f"Resuming from checkpoint: {resume_ckpt}")
+        elif getattr(self.args, "continue_from_adapter", None):
+            print(f"Continual training from adapter: {self.args.continue_from_adapter}")
+            print(f"Training from step 0 on new data")
         train_result = trainer.train(resume_from_checkpoint=resume_ckpt)
 
         # Save final model
@@ -512,6 +525,11 @@ class BaseTrainerScript(ABC):
             "--resume_from_checkpoint", type=str, default=None,
             help="Path to checkpoint directory to resume training from"
         )
+        parser.add_argument(
+            "--continue_from_adapter", type=str, default=None,
+            help="Path or HF repo of a trained LoRA adapter to continue training on new data. "
+                 "Loads the adapter weights as starting point but trains from step 0 on fresh data."
+        )
 
         # Add method-specific arguments
         self.add_method_specific_args(parser)
@@ -577,6 +595,14 @@ class BaseTrainerScript(ABC):
             self.args.model_name_or_path,
             trust_remote_code=True,
         )
+
+        # Continual training: load pre-trained adapter and merge into base weights
+        if getattr(self.args, "continue_from_adapter", None):
+            print(f"\n--- Continual Training Mode ---")
+            print(f"Loading pre-trained adapter: {self.args.continue_from_adapter}")
+            model = PeftModel.from_pretrained(model, self.args.continue_from_adapter)
+            model = model.merge_and_unload()
+            print(f"Adapter merged into base weights successfully.")
 
         # Set padding token if not set
         if tokenizer.pad_token is None:
