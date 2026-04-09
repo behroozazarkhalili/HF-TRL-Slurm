@@ -1118,6 +1118,7 @@ def main():
         max_completion_length=args.max_completion_length,
         max_prompt_length=args.max_prompt_length,
         temperature=0.7,
+        mask_truncated_completions=True,  # DAPO: exclude truncated completions from loss
 
         # Training hyperparameters
         num_train_epochs=args.num_train_epochs,
