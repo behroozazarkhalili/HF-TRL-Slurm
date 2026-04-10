@@ -1,0 +1,37 @@
+name: HF Download Stats
+
+on:
+  schedule:
+    - cron: '7 9 * * *'  # Daily at 9:07 AM UTC
+  workflow_dispatch: {}   # Manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  track-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install huggingface_hub
+
+      - name: Run download stats
+        run: python scripts/hf_download_stats.py --log --author ermiaazarkhalili
+
+      - name: Commit logs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add logs/hf_stats/
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: daily HF download stats $(date -u +%Y-%m-%d)"
+            git push
+          fi

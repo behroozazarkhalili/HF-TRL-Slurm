@@ -6,13 +6,13 @@
 
 #SBATCH --job-name=qwen3-1.7b-grpo-numinamath-cot
 #SBATCH --account=def-maxwl_gpu
-#SBATCH --time=1-00:00:00
+#SBATCH --time=0-01:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
-#SBATCH --partition=gpubase_bygpu_b5
+#SBATCH --partition=gpubase_bygpu_b1
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 #SBATCH --mail-type=BEGIN,END,FAIL
@@ -23,11 +23,11 @@ MODEL_NAME='Qwen/Qwen3-1.7B'
 DATASET_NAME='AI-MO/NuminaMath-CoT'
 
 # Sample size configuration (for model naming when using streaming)
-MAX_SAMPLES=10000
-SAMPLE_SIZE_LABEL='10K'
+MAX_SAMPLES=50
+SAMPLE_SIZE_LABEL="smoke-50"
 
-HUB_MODEL_ID='ermiaazarkhalili/Qwen3-1.7B-GRPO-NuminaMath-10K'
-GGUF_REPO_ID='ermiaazarkhalili/Qwen3-1.7B-GRPO-NuminaMath-10K-GGUF'
+HUB_MODEL_ID='ermiaazarkhalili/Qwen3-1.7B-GRPO-NuminaMath-smoke-50'
+GGUF_REPO_ID='ermiaazarkhalili/Qwen3-1.7B-GRPO-NuminaMath-smoke-50-GGUF'
 
 # Training parameters (medium model config)
 BATCH_SIZE=2
@@ -125,14 +125,13 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --save_steps 500 \
     --save_total_limit 3 \
     --logging_steps 10 \
-    --push_to_hub \
     --hub_model_id $HUB_MODEL_ID \
     --hub_strategy end \
     --report_to trackio \
     --project "qwen3-1.7b-grpo-numinamath" \
     --run_name "qwen3-1.7b-grpo-numinamath-cot-$SLURM_JOB_ID" \
     --streaming \
-    --max_samples 10000 \
+    --max_samples 50 \
     --max_completion_length $MAX_COMPLETION_LENGTH \
     --max_prompt_length $MAX_PROMPT_LENGTH \
     --num_generations $NUM_GENERATIONS \
@@ -156,7 +155,7 @@ echo "Phase 2: Generating Model Card"
 echo "=========================================="
 
 python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/generate_model_card.py \
-    --model_name "Qwen3-1.7B-GRPO-NuminaMath-10K" \
+    --model_name "Qwen3-1.7B-GRPO-NuminaMath-smoke-50" \
     --base_model "$MODEL_NAME" \
     --dataset "$DATASET_NAME" \
     --training_method GRPO \

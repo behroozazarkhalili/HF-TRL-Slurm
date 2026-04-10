@@ -6,7 +6,7 @@
 
 #SBATCH --job-name=deepseek-r1-distill-qwen-1.5b-grpo-dapo-math-17k-processed
 #SBATCH --account=def-maxwl_gpu
-#SBATCH --time=1-00:00:00
+#SBATCH --time=3-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -116,7 +116,6 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --gradient_accumulation_steps $GRAD_ACCUM \
     --learning_rate $LEARNING_RATE \
     --bf16 \
-    --use_4bit \
     --gradient_checkpointing \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \
@@ -136,7 +135,8 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --max_completion_length $MAX_COMPLETION_LENGTH \
     --max_prompt_length $MAX_PROMPT_LENGTH \
     --num_generations $NUM_GENERATIONS \
-    --reward_type $REWARD_TYPE
+    --reward_type $REWARD_TYPE \
+    --resume_from_checkpoint $(ls -td /scratch/ermia/outputs/deepseek-r1-distill-qwen-1.5b-grpo-dapo-math-17k-processed-32957808/checkpoint-* | head -1)
 
 TRAIN_EXIT_CODE=$?
 

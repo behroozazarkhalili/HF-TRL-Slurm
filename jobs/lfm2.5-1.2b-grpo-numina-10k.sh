@@ -116,7 +116,6 @@ python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/
     --gradient_accumulation_steps $GRAD_ACCUM \
     --learning_rate $LEARNING_RATE \
     --bf16 \
-    --use_4bit \
     --gradient_checkpointing \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \

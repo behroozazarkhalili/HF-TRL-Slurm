@@ -446,26 +446,42 @@ def main():
         llama_cpp_dir = clone_llama_cpp(work_dir)
         quantize_tool = build_llama_cpp(llama_cpp_dir)
 
-        # Check if model is LoRA adapter
+        # Detect model type: full model vs LoRA adapter
+        from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
+
         model_dir = args.model
-        if args.base_model:
-            model_dir = merge_lora_adapter(args.model, args.base_model, work_dir)
+        is_adapter = False
+
+        try:
+            files = list_repo_files(args.model)
+            is_adapter = "adapter_config.json" in files
+        except OSError:
+            pass  # Local path or private repo — will detect below
+
+        if is_adapter:
+            # LoRA adapter — merge with base model
+            base_model = args.base_model
+            if not base_model:
+                # Auto-detect base model from adapter_config.json
+                adapter_config_path = hf_hub_download(args.model, "adapter_config.json")
+                with open(adapter_config_path) as f:
+                    config = json.load(f)
+                base_model = config.get("base_model_name_or_path")
+            if not base_model:
+                raise ValueError(f"Adapter detected but no base model found. Pass --base_model explicitly.")
+            print(f"LoRA adapter detected. Base model: {base_model}")
+            model_dir = merge_lora_adapter(args.model, base_model, work_dir)
         else:
-            # Check if it's a LoRA adapter by looking for adapter_config.json
-            from huggingface_hub import hf_hub_download, list_repo_files
-            try:
-                files = list_repo_files(args.model)
-                if "adapter_config.json" in files:
-                    print("Detected LoRA adapter, need base model")
-                    adapter_config = hf_hub_download(args.model, "adapter_config.json")
-                    with open(adapter_config) as f:
-                        config = json.load(f)
-                    base_model = config.get("base_model_name_or_path")
-                    if base_model:
-                        model_dir = merge_lora_adapter(args.model, base_model, work_dir)
-            except (OSError, json.JSONDecodeError, KeyError, ValueError) as e:
-                # LoRA detection failed - continue with model as-is
-                print(f"Note: Could not auto-detect LoRA adapter: {e}")
+            # Full model — download to local dir for llama.cpp conversion
+            print(f"Full model detected (no adapter_config.json)")
+            local_dir = os.path.join(work_dir, "full_model")
+            print(f"Downloading model to: {local_dir}")
+            model_dir = snapshot_download(
+                args.model,
+                local_dir=local_dir,
+                ignore_patterns=["*.md", "*.txt", ".gitattributes"],
+            )
+            print(f"Model downloaded: {model_dir}")
 
         # Convert to GGUF
         gguf_dir = os.path.join(work_dir, "gguf_output")

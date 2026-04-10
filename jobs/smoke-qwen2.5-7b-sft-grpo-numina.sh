@@ -1,0 +1,61 @@
+#!/bin/bash
+#SBATCH --job-name=smoke-qwen2.5-7b-grpo
+#SBATCH --account=def-maxwl_gpu
+#SBATCH --time=0-01:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
+#SBATCH --partition=gpubase_bygpu_b1
+#SBATCH --output=logs/%x-%j.out
+#SBATCH --error=logs/%x-%j.err
+
+module load gcc arrow python/3.11.5
+source /scratch/ermia/venvs/hf_env/bin/activate
+
+export SCRATCH=${SCRATCH:-/scratch/$USER}
+export HF_HOME=$SCRATCH/.cache/huggingface
+export TRANSFORMERS_CACHE=$HF_HOME/hub
+export OUTPUT_DIR=$SCRATCH/outputs/smoke-qwen2.5-7b-grpo-$SLURM_JOB_ID
+
+if [[ -f "/project/6014832/ermia/HF-TRL/.env" ]]; then
+    export $(grep -v '^#' /project/6014832/ermia/HF-TRL/.env | xargs)
+fi
+
+mkdir -p $OUTPUT_DIR logs
+
+echo "=== SMOKE TEST: ermiaazarkhalili/Qwen2.5-7B-SFT-UltraChat ==="
+echo "Node: $SLURMD_NODENAME | Start: $(date)"
+echo "Note: 7B model — tight on MIG 3g.40gb (40GB). Using gradient_checkpointing."
+echo "Key metric: clipped_ratio — must evaluate for viability"
+
+PYTHONUNBUFFERED=1 python /project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_grpo.py \
+    --model_name_or_path ermiaazarkhalili/Qwen2.5-7B-SFT-UltraChat \
+    --dataset_name AI-MO/NuminaMath-CoT \
+    --output_dir $OUTPUT_DIR \
+    --num_train_epochs 1 \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 16 \
+    --learning_rate 5e-7 \
+    --bf16 \
+    --gradient_checkpointing \
+    --lora_r 8 \
+    --lora_alpha 16 \
+    --lora_dropout 0.05 \
+    --save_strategy steps \
+    --save_steps 10 \
+    --save_total_limit 2 \
+    --logging_steps 5 \
+    --report_to none \
+    --run_name "smoke-qwen2.5-7b-grpo" \
+    --streaming \
+    --max_samples 100 \
+    --seed 42 \
+    --max_completion_length 2048 \
+    --max_prompt_length 512 \
+    --num_generations 2 \
+    --reward_type combined \
+    --max_steps 15
+
+echo "=== COMPLETE (exit $?) ==="
