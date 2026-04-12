@@ -398,11 +398,15 @@ def load_and_prepare_dataset(args):
                     solution = example.get("solution", "")
                     if solution:
                         answer = extract_answer(solution)
-                if prompt and answer:
+                if prompt and answer and isinstance(prompt, str):
                     GROUND_TRUTH_ANSWERS[_prompt_key(prompt)] = str(answer)
 
             # Skip empty/whitespace-only prompts
-            if prompt and prompt.strip():
+            # Handle both string prompts and list-of-messages prompts
+            if isinstance(prompt, list) and len(prompt) > 0:
+                # List of message dicts — TRL GRPOTrainer supports this natively
+                samples.append({"prompt": prompt})
+            elif isinstance(prompt, str) and prompt.strip():
                 samples.append({"prompt": prompt})
             else:
                 continue

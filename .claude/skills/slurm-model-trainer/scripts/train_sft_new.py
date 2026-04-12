@@ -63,10 +63,7 @@ class SFTTrainerScript(BaseTrainerScript):
             help="Number of processes for dataset preprocessing. "
                  "Auto-detects from SLURM_CPUS_PER_TASK if not set."
         )
-        parser.add_argument(
-            "--resume_from_checkpoint", type=str, default=None,
-            help="Path to checkpoint directory to resume training from"
-        )
+        # Note: --resume_from_checkpoint is already defined in base_trainer.py
 
     def prepare_dataset(self) -> Tuple[Any, Optional[Any]]:
         """Prepare dataset with intelligent format detection.
