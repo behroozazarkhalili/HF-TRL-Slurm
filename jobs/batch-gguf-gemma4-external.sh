@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=160G
+#SBATCH --mem=64G
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
 #SBATCH --partition=gpubase_bygpu_b5
 #SBATCH --output=logs/%x-%j.out
@@ -58,17 +58,18 @@ MODELS=(
     #   Darwin:      evolutionary merge (DARE-TIES), multilingual
     #   kai-os:      LoRA adapter on gemma-4-31b-it (Opus-4.6-Reasoning-2100x)
     #   arsovskidev: full SFT on gemma-4-E4B-it (4B model)
-    "EganAI/gemma-4-31B-Claude-4.6-Opus-Reasoning-Distilled|google/gemma-4-31B-it|full|Distillation-SFT|Claude-4.6-Opus|apache-2.0|gemma-4-31b-it-claude-opus-4.6-sft-reasoning|ermiaazarkhalili/gemma-4-31b-it-claude-opus-4.6-sft-reasoning-GGUF"
-    "FINAL-Bench/Darwin-31B-Opus|google/gemma-4-31B-it|full|Evolutionary-Merge|Opus-4.6-Reasoning|apache-2.0|gemma-4-31b-it-claude-opus-4.6-merge-reasoning-multilingual|ermiaazarkhalili/gemma-4-31b-it-claude-opus-4.6-merge-reasoning-multilingual-GGUF"
-    "kai-os/gemma4-31b-Opus-4.6-reasoning|google/gemma-4-31B-it|adapter|LoRA-Distillation|Opus-4.6-Reasoning-2100x|apache-2.0|gemma-4-31b-it-claude-opus-4.6-lora-reasoning|ermiaazarkhalili/gemma-4-31b-it-claude-opus-4.6-lora-reasoning-GGUF"
+    # ── 31B models commented out for now (need 160G RAM) ──────────────────────
+    # "EganAI/gemma-4-31B-Claude-4.6-Opus-Reasoning-Distilled|google/gemma-4-31B-it|full|Distillation-SFT|Claude-4.6-Opus|apache-2.0|gemma-4-31b-it-claude-opus-4.6-sft-reasoning|ermiaazarkhalili/gemma-4-31b-it-claude-opus-4.6-sft-reasoning-GGUF"
+    # "FINAL-Bench/Darwin-31B-Opus|google/gemma-4-31B-it|full|Evolutionary-Merge|Opus-4.6-Reasoning|apache-2.0|gemma-4-31b-it-claude-opus-4.6-merge-reasoning-multilingual|ermiaazarkhalili/gemma-4-31b-it-claude-opus-4.6-merge-reasoning-multilingual-GGUF"
+    # "kai-os/gemma4-31b-Opus-4.6-reasoning|google/gemma-4-31B-it|adapter|LoRA-Distillation|Opus-4.6-Reasoning-2100x|apache-2.0|gemma-4-31b-it-claude-opus-4.6-lora-reasoning|ermiaazarkhalili/gemma-4-31b-it-claude-opus-4.6-lora-reasoning-GGUF"
     "arsovskidev/Gemma-4-E4B-Claude-4.6-Opus-Reasoning-Distilled|google/gemma-4-E4B-it|full|Distillation-SFT|Opus-4.6-Reasoning-3000x|apache-2.0|gemma-4-4b-it-claude-opus-4.6-sft-reasoning|ermiaazarkhalili/gemma-4-4b-it-claude-opus-4.6-sft-reasoning-GGUF"
 
-    # ── Google Gemma 4 official series ─────────────────────────────────────────
-    # Naming convention: gemma-4-{size}-{variant}-GGUF
+    # ── Google Gemma 4 official series (sub-10B only for now) ──────────────────
     "google/gemma-4-2b-it|google/gemma-4-2b|full|Instruction-Tuning|Google|gemma|gemma-4-2b-it|ermiaazarkhalili/gemma-4-2b-it-GGUF"
     "google/gemma-4-9b-it|google/gemma-4-9b|full|Instruction-Tuning|Google|gemma|gemma-4-9b-it|ermiaazarkhalili/gemma-4-9b-it-GGUF"
-    "google/gemma-4-27b-it|google/gemma-4-27b|full|Instruction-Tuning|Google|gemma|gemma-4-27b-it|ermiaazarkhalili/gemma-4-27b-it-GGUF"
-    "google/gemma-4-27b|google/gemma-4-27b|full|Pretraining|Google|gemma|gemma-4-27b-base|ermiaazarkhalili/gemma-4-27b-base-GGUF"
+    # ── 27B models commented out for now (need more RAM) ──────────────────────
+    # "google/gemma-4-27b-it|google/gemma-4-27b|full|Instruction-Tuning|Google|gemma|gemma-4-27b-it|ermiaazarkhalili/gemma-4-27b-it-GGUF"
+    # "google/gemma-4-27b|google/gemma-4-27b|full|Pretraining|Google|gemma|gemma-4-27b-base|ermiaazarkhalili/gemma-4-27b-base-GGUF"
 )
 
 TOTAL=${#MODELS[@]}

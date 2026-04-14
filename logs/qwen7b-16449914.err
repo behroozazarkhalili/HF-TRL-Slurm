@@ -1,23 +1,0 @@
-2025-12-23 21:57:19.679660: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
-2025-12-23 21:59:12.657147: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
-WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
-E0000 00:00:1766555957.839151 1936168 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
-E0000 00:00:1766555961.638500 1936168 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
-W0000 00:00:1766555976.321192 1936168 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
-W0000 00:00:1766555976.321283 1936168 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
-W0000 00:00:1766555976.321295 1936168 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
-W0000 00:00:1766555976.321305 1936168 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
-2025-12-23 21:59:37.436270: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
-To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
-`torch_dtype` is deprecated! Use `dtype` instead!
-Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files:  25%|██▌       | 1/4 [00:16<00:49, 16.40s/it]Fetching 4 files: 100%|██████████| 4/4 [00:16<00:00,  4.11s/it]
-Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:04<00:13,  4.46s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:06<00:06,  3.33s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:10<00:03,  3.27s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:13<00:00,  3.12s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:13<00:00,  3.27s/it]
-Generating train split:   0%|          | 0/15806 [00:00<?, ? examples/s]Generating train split:  51%|█████     | 8000/15806 [00:00<00:00, 59441.29 examples/s]Generating train split: 100%|██████████| 15806/15806 [00:00<00:00, 95907.60 examples/s]
-Generating test split:   0%|          | 0/200 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 200/200 [00:00<00:00, 36751.84 examples/s]
-Traceback (most recent call last):
-  File "/project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_sft.py", line 362, in <module>
-    main()
-  File "/project/6014832/ermia/HF-TRL/.claude/skills/slurm-model-trainer/scripts/train_sft.py", line 315, in main
-    trainer = SFTTrainer(
-              ^^^^^^^^^^^
-TypeError: SFTTrainer.__init__() got an unexpected keyword argument 'tokenizer'

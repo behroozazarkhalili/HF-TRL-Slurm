@@ -44,3 +44,8 @@ Thumbs.db
 
 # Outputs (stored on scratch)
 outputs/
+
+# Notebook training artifacts (adapters, merged models, GGUF)
+notebooks/output/
+notebooks/*-adapter/
+notebooks/*-merged/
