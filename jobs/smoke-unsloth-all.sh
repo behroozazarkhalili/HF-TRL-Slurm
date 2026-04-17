@@ -22,9 +22,15 @@ NOTEBOOKS=(
     "xlam_function_calling_lfm2.5-1.2b_unsloth|smoke-unsloth-xlam-lfm25-12b|32G|0-01:00:00"
     "xlam_function_calling_gemma4-e2b_unsloth|smoke-unsloth-xlam-gemma4-e2b|32G|0-01:00:00"
     "xlam_function_calling_gemma4-e4b_unsloth|smoke-unsloth-xlam-gemma4-e4b|40G|0-01:30:00"
+    "xlam_function_calling_gemma4-26b-a4b_unsloth|smoke-unsloth-xlam-gemma4-26b-a4b|64G|0-01:30:00"
+    "xlam_function_calling_gemma4-31b_unsloth|smoke-unsloth-xlam-gemma4-31b|64G|0-01:30:00"
+    "xlam_function_calling_carnice-9b_unsloth|smoke-unsloth-xlam-carnice-9b|40G|0-01:30:00"
     "sft_distillation_qwen3.5_unsloth|smoke-unsloth-sft-qwen35|32G|0-01:00:00"
     "sft_distillation_lfm2.5_unsloth|smoke-unsloth-sft-lfm25|32G|0-01:00:00"
     "sft_distillation_gemma4_unsloth|smoke-unsloth-sft-gemma4|32G|0-01:00:00"
+    "sft_distillation_gemma4-26b-a4b_unsloth|smoke-unsloth-sft-gemma4-26b-a4b|64G|0-01:30:00"
+    "sft_distillation_gemma4-31b_unsloth|smoke-unsloth-sft-gemma4-31b|64G|0-01:30:00"
+    "sft_distillation_carnice-9b_unsloth|smoke-unsloth-sft-carnice-9b|40G|0-01:30:00"
 )
 
 echo "=== UNSLOTH NOTEBOOK SMOKE TESTS ==="
@@ -69,7 +75,7 @@ echo "Start: $(date)"
 echo "Job ID: $SLURM_JOB_ID"
 echo ""
 
-module load gcc arrow python/3.11.5
+module load StdEnv/2023 gcc arrow python/3.11.5 cuda/12.6
 source __VENV__/bin/activate
 
 export SCRATCH=${SCRATCH:-/scratch/$USER}

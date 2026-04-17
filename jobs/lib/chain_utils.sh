@@ -114,7 +114,10 @@ bootstrap_training_env() {
 
     [[ -d "$venv_path" ]] || stage_die "venv not found: $venv_path (tried venv_user='$venv_user')"
 
-    module load gcc arrow python/3.11.5
+    # DRAC: cuda/12.6 required for torch.cuda.is_available() to work with the
+    # modern bundled CUDA (torch 2.9+). Without it, `CUDA unknown error` fires
+    # and all GPU-using libs (unsloth, transformers) fail to initialize.
+    module load StdEnv/2023 gcc arrow python/3.11.5 cuda/12.6
     # shellcheck disable=SC1091
     source "${venv_path}/bin/activate"
 

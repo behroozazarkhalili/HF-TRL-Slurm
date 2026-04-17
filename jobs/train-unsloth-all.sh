@@ -71,7 +71,7 @@ echo "Start: $(date)"
 echo "Job ID: $SLURM_JOB_ID"
 echo ""
 
-module load gcc arrow python/3.11.5
+module load StdEnv/2023 gcc arrow python/3.11.5 cuda/12.6
 source __VENV__/bin/activate
 
 export SCRATCH=${SCRATCH:-/scratch/$USER}
