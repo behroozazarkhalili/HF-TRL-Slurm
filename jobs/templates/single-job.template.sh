@@ -47,12 +47,30 @@
 #   - Set MAX_SAMPLES=10, MAX_STEPS=5.
 #   - Change --partition=gpubase_bygpu_b1 and --time=0-00:30:00.
 #   - Change EXP_NAME to "smoke-<your-exp>".
+#
+# Failure recovery:
+#   - If the job OOMs:    bump #SBATCH --mem=<higher> (or --gres to a larger GPU),
+#                         then re-submit:  sbatch jobs/my-experiment.sh
+#                         (A new OUTPUT_DIR is created per SLURM_JOB_ID, no clobber.)
+#   - If the job TIMEOUTs: bump #SBATCH --time and optionally --partition.
+#   - If Hub push fails:   training already completed. Retry push manually:
+#                            huggingface-cli upload $HUB_MODEL_ID $OUTPUT_DIR
+#   - Duplicate submission:  refused by the concurrent-run guard below
+#                            (prevents 2 jobs racing to push the same Hub repo).
+#   - Logs: $LOGS_DIR/<job-name>-<job-id>.out and .err.
+#   - Monitor: squeue -u $USER | grep <EXP_NAME>
+#
+# Overrides without editing the file:
+#   EXP_NAME=foo sbatch jobs/my-experiment.sh    # change experiment name
+#   PROJECT_DIR=/path/to/repo sbatch ...          # run with a different repo clone
+#   VENV_USER=ermia sbatch ...                    # use someone else's venv
 # =============================================================================
 
-# >>>>> EDIT ME: SBATCH directives (job name derived from EXP_NAME via envsubst at submit time) >>>>>
-#   NOTE: SBATCH directives are parsed from the script BEFORE any shell runs,
-#   so they cannot reference shell variables. If you change EXP_NAME below,
-#   manually update #SBATCH --job-name=<EXP_NAME> too.
+# >>>>> EDIT ME: SBATCH directives >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+# NOTE: SBATCH directives are parsed from the script BEFORE any shell runs,
+# so they cannot reference shell variables. If you change EXP_NAME below,
+# manually update #SBATCH --job-name to match (or use
+# `sbatch --job-name="$EXP_NAME" <this-script>` to override at submit time).
 #SBATCH --job-name=granite-4.0-micro-grpo-numinamath-10k
 #SBATCH --account=def-maxwl_gpu
 #SBATCH --time=4-00:00:00
@@ -62,21 +80,28 @@
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
 #SBATCH --partition=gpubase_bygpu_b5
-#SBATCH --output=logs/%x-%j.out
-#SBATCH --error=logs/%x-%j.err
+#SBATCH --output=/project/6014832/ermia/HF-TRL/logs/%x-%j.out
+#SBATCH --error=/project/6014832/ermia/HF-TRL/logs/%x-%j.err
 #SBATCH --mail-type=BEGIN,END,FAIL
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 set -euo pipefail
 
 # ── Configuration (readonly constants) ───────────────────────────────
-readonly PROJECT_DIR="/project/6014832/ermia/HF-TRL"
+
+# >>>>> EDIT ME: project identity (usually invariant per site) >>>>>>>>
+# PROJECT_DIR must match the --output/--error SBATCH paths above.
+readonly PROJECT_DIR="${PROJECT_DIR:-/project/6014832/ermia/HF-TRL}"
 readonly CHAIN_UTILS="$PROJECT_DIR/jobs/lib/chain_utils.sh"
 readonly TRAIN_GRPO_SCRIPT="$PROJECT_DIR/.claude/skills/slurm-model-trainer/scripts/train_grpo.py"
+readonly LOGS_DIR="$PROJECT_DIR/logs"
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # >>>>> EDIT ME: experiment identity (single source of truth) >>>>>>>>>
 # Keep in sync with #SBATCH --job-name above (cannot derive automatically).
-readonly EXP_NAME="granite-4.0-micro-grpo-numinamath-10k"
+# Env override: EXP_NAME=foo sbatch my-experiment.sh
+: "${EXP_NAME:=granite-4.0-micro-grpo-numinamath-10k}"
+readonly EXP_NAME
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # >>>>> EDIT ME: model + dataset + sample budget >>>>>>>>>>>>>>>>>>>>>>
@@ -100,9 +125,10 @@ readonly REWARD_TYPE='combined'
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # >>>>> EDIT ME (optional): HuggingFace Hub push >>>>>>>>>>>>>>>>>>>>>>
-# Set PUSH_TO_HUB=false to skip Hub upload entirely.
-readonly PUSH_TO_HUB=true
-readonly HUB_MODEL_ID="ermiaazarkhalili/$EXP_NAME"
+# Set PUSH_TO_HUB=false to skip Hub upload. HF_USER is your namespace.
+readonly PUSH_TO_HUB="true"
+readonly HF_USER="ermiaazarkhalili"
+readonly HUB_MODEL_ID="$HF_USER/$EXP_NAME"
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # ── Output paths (job-ID-scoped; reruns never clobber) ───────────────
@@ -116,6 +142,23 @@ source "$CHAIN_UTILS"
 # Outer logging (no STAGE_NUM context — single job)
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
+# ── EXP_NAME format validation (defense vs. typos / shell meta) ──────
+[[ "$EXP_NAME" =~ ^[a-zA-Z0-9._-]+$ ]] \
+    || die "EXP_NAME must match [a-zA-Z0-9._-]+ (no spaces/pipes/shell meta): '$EXP_NAME'"
+
+# ── Concurrent-run guard (Hub push collision prevention) ─────────────
+# If another job with same --job-name is RUNNING/PENDING, refuse to
+# submit a duplicate (would race on the same HUB_MODEL_ID).
+if command -v squeue >/dev/null 2>&1 && [[ -n "${SLURM_JOB_ID:-}" ]]; then
+    DUPES=$(squeue -u "$USER" -h --format="%i %j" 2>/dev/null \
+                | awk -v me="$SLURM_JOB_ID" -v jn="$EXP_NAME" \
+                      '$1 != me && $2 == jn {c++} END {print c+0}')
+    if (( DUPES > 0 )); then
+        die "Duplicate job detected: $DUPES other job(s) with --job-name=$EXP_NAME already queued/running.
+  Cancel the duplicates first, or rename EXP_NAME to run a parallel experiment."
+    fi
+fi
+
 # ── Banner ───────────────────────────────────────────────────────────
 echo "=========================================="
 echo "JOB: ${SLURM_JOB_NAME:-$EXP_NAME} (${SLURM_JOB_ID:-local})"
@@ -124,7 +167,12 @@ echo "  Model:    $MODEL_NAME"
 echo "  Dataset:  $DATASET_NAME  (max_samples=$MAX_SAMPLES)"
 echo "  Node:     ${SLURMD_NODENAME:-local}"
 echo "  Output:   $OUTPUT_DIR"
-echo "  HubPush:  $PUSH_TO_HUB${PUSH_TO_HUB:+ → $HUB_MODEL_ID}"
+echo "  Logs:     $LOGS_DIR"
+if [[ "$PUSH_TO_HUB" == "true" ]]; then
+    echo "  HubPush:  enabled → $HUB_MODEL_ID"
+else
+    echo "  HubPush:  disabled"
+fi
 echo "  Start:    $(date)"
 echo "=========================================="
 
@@ -132,7 +180,7 @@ echo "=========================================="
 # Loads modules, activates venv, exports HF_HOME & PYTHONUNBUFFERED, reads .env
 bootstrap_training_env hf_env
 
-mkdir -p "$OUTPUT_DIR" logs
+mkdir -p "$OUTPUT_DIR" "$LOGS_DIR"
 
 # ── Build training args (array form — robust to spaces & empties) ────
 TRAIN_ARGS=(

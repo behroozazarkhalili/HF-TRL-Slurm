@@ -56,33 +56,70 @@
 #
 # Extending the template:
 #   - Add a new CLI flag: edit the heredoc + add the placeholder to `subs` array.
-#   - Change SBATCH resources: edit the #SBATCH lines in the heredoc (time, mem,
-#     --gres, --partition). These are stage-specific, not derived.
+#   - Change SBATCH resources: edit the SLURM_* constants below (no heredoc edit).
 #   - Different venv (Unsloth, TRL): bootstrap_training_env hf_unsloth
+#   - Different user's venv: VENV_USER=ermia bash my-chain.sh (or second arg to
+#     bootstrap_training_env inside the heredoc).
+#
+# Failure recovery:
+#   - If stage N OOMs:   bump SLURM_MEM or SLURM_GRES, then FORCE=1 bash my-chain.sh
+#                        (re-runs from stage 1) — or manually resubmit stage-N.sh:
+#                          sbatch --dependency=afterok:<prev-job-id> \
+#                                 "$CHAIN_DIR/stage-N.sh"
+#   - If stage N TIMEOUT: bump SLURM_TIME (move to b4/b5 partition if needed),
+#                         FORCE=1 bash my-chain.sh.
+#   - If stage N crashes but adapter saved:  skip to the next stage manually via
+#                         sbatch "$CHAIN_DIR/stage-(N+1).sh" — adapter pointer
+#                         stage-N.adapter is already written.
+#   - Logs: $LOGS_DIR/<job-name>-<job-id>.out and .err.
+#   - Monitor: squeue -u $USER | grep $EXP_NAME
+#
+# Re-run safety:
+#   - `rm -rf "$CHAIN_DIR"` is guarded: refuses non-empty CHAIN_DIR unless FORCE=1.
+#   - Three invariant checks (USER non-empty, EXP_NAME regex, CHAIN_DIR prefix).
+#   - EXP_NAME format restricted to [a-zA-Z0-9._-]+ to prevent shell-meta bugs.
 # =============================================================================
 
 set -euo pipefail
 
 # ── Configuration (readonly constants) ───────────────────────────────
-readonly PROJECT_DIR="/project/6014832/ermia/HF-TRL"
+
+# >>>>> EDIT ME: project + cluster identity (usually invariant per site) >>>>>
+# PROJECT_DIR: absolute path to your clone of the HF-TRL repo.
+# CHAIN_UTILS: path to the shared module. Leave as-is unless you move the file.
+readonly PROJECT_DIR="${PROJECT_DIR:-/project/6014832/ermia/HF-TRL}"
 readonly CHAIN_UTILS="$PROJECT_DIR/jobs/lib/chain_utils.sh"
+readonly LOGS_DIR="$PROJECT_DIR/logs"
+readonly TRAIN_GRPO_SCRIPT="$PROJECT_DIR/.claude/skills/slurm-model-trainer/scripts/train_grpo.py"
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # >>>>> EDIT ME: experiment identity (single source of truth) >>>>>>>>>
 # Rename EXP_NAME alone to retarget the whole chain — CHAIN_DIR,
 # SBATCH --job-name, OUTPUT_DIR, and the monitor command all follow.
-readonly EXP_NAME="granite-chain-5sample"
+# Env override supported: EXP_NAME=foo bash my-chain.sh
+: "${EXP_NAME:=granite-chain-5sample}"
+readonly EXP_NAME
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 readonly CHAIN_DIR="/scratch/$USER/outputs/$EXP_NAME"
 readonly JOB_NAME_PREFIX="$EXP_NAME"
-readonly TRAIN_GRPO_SCRIPT="$PROJECT_DIR/.claude/skills/slurm-model-trainer/scripts/train_grpo.py"
+
+# >>>>> EDIT ME: SLURM resource defaults (used inside the heredoc) >>>>
+# Passed to every stage's SBATCH directives via sed injection.
+readonly SLURM_ACCOUNT="def-maxwl_gpu"
+readonly SLURM_PARTITION="gpubase_bygpu_b3"   # b1 ≤3h (smoke), b3 ≤24h (prod), b5 ≤7d
+readonly SLURM_TIME="0-06:00:00"              # per-stage wall time
+readonly SLURM_GRES="gpu:nvidia_h100_80gb_hbm3_3g.40gb:1"
+readonly SLURM_MEM="32G"
+readonly SLURM_CPUS=4
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # >>>>> EDIT ME: model + dataset + chain structure >>>>>>>>>>>>>>>>>>>>
 readonly MODEL_NAME='ibm-granite/granite-4.0-micro'
 readonly DATASET_NAME='AI-MO/NuminaMath-CoT'
 readonly NUM_STAGES=3
 readonly BASE_SEED=42
-readonly STAGE_SAMPLES=5          # samples per stage (5 = smoke; use 2000+ for real)
+readonly STAGE_SAMPLES=2000       # samples per stage (production default; 5-50 for smoke)
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # >>>>> EDIT ME: training hyperparameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -95,7 +132,14 @@ readonly MAX_COMPLETION_LENGTH=512
 readonly MAX_PROMPT_LENGTH=256
 readonly NUM_GENERATIONS=2
 readonly REWARD_TYPE='combined'
+readonly NUM_TRAIN_EPOCHS=1
+readonly SAVE_STRATEGY='steps'    # 'no' | 'steps' | 'epoch' — 'no' is UNSAFE for >100 samples
+readonly SAVE_STEPS=100
+readonly SAVE_TOTAL_LIMIT=2
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+# ── CLI flags (unofficial; set FORCE=1 to allow destructive re-runs) ─
+FORCE="${FORCE:-0}"
 
 # ── Load shared chain helpers (submit_job, log helpers) ──────────────
 [[ -r "$CHAIN_UTILS" ]] || { printf 'ERROR: chain_utils.sh not found at %s\n' "$CHAIN_UTILS" >&2; exit 1; }
@@ -116,16 +160,16 @@ generate_stage_script() {
     cat > "$out" << 'STAGE_EOF'
 #!/bin/bash
 #SBATCH --job-name=__JOB_NAME_PREFIX__-stage-__STAGE__
-#SBATCH --account=def-maxwl_gpu
-#SBATCH --time=0-00:30:00
+#SBATCH --account=__SLURM_ACCOUNT__
+#SBATCH --time=__SLURM_TIME__
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
-#SBATCH --partition=gpubase_bygpu_b1
-#SBATCH --output=logs/%x-%j.out
-#SBATCH --error=logs/%x-%j.err
+#SBATCH --cpus-per-task=__SLURM_CPUS__
+#SBATCH --mem=__SLURM_MEM__
+#SBATCH --gres=__SLURM_GRES__
+#SBATCH --partition=__SLURM_PARTITION__
+#SBATCH --output=__LOGS_DIR__/%x-%j.out
+#SBATCH --error=__LOGS_DIR__/%x-%j.err
 
 set -euo pipefail
 
@@ -144,7 +188,7 @@ log_stage_info "Node: $SLURMD_NODENAME | $(date)"
 bootstrap_training_env hf_env
 
 export OUTPUT_DIR="$CHAIN_DIR/stage${STAGE_NUM}-$SLURM_JOB_ID"
-mkdir -p "$OUTPUT_DIR" logs
+mkdir -p "$OUTPUT_DIR" "__LOGS_DIR__"
 
 # Resolve adapter from previous stage (empty arg for stage 1)
 ADAPTER_ARG=$(resolve_prev_adapter_arg "$CHAIN_DIR" "$STAGE_NUM")
@@ -157,7 +201,7 @@ python __TRAIN_GRPO_SCRIPT__ \
     --model_name_or_path __MODEL_NAME__ \
     --dataset_name __DATASET_NAME__ \
     --output_dir "$OUTPUT_DIR" \
-    --num_train_epochs 1 \
+    --num_train_epochs __NUM_TRAIN_EPOCHS__ \
     --per_device_train_batch_size __BATCH_SIZE__ \
     --gradient_accumulation_steps __GRAD_ACCUM__ \
     --learning_rate __LEARNING_RATE__ \
@@ -166,7 +210,9 @@ python __TRAIN_GRPO_SCRIPT__ \
     --lora_r __LORA_R__ \
     --lora_alpha __LORA_ALPHA__ \
     --lora_dropout 0.05 \
-    --save_strategy no \
+    --save_strategy __SAVE_STRATEGY__ \
+    --save_steps __SAVE_STEPS__ \
+    --save_total_limit __SAVE_TOTAL_LIMIT__ \
     --logging_steps 1 \
     --streaming \
     --max_samples __STAGE_SAMPLES__ \
@@ -187,8 +233,12 @@ STAGE_EOF
     local -A subs=(
         [STAGE]="$stage"                    [NUM_STAGES]="$NUM_STAGES"
         [CHAIN_DIR]="$CHAIN_DIR"            [CHAIN_UTILS]="$CHAIN_UTILS"
+        [LOGS_DIR]="$LOGS_DIR"
         [JOB_NAME_PREFIX]="$JOB_NAME_PREFIX"
         [TRAIN_GRPO_SCRIPT]="$TRAIN_GRPO_SCRIPT"
+        [SLURM_ACCOUNT]="$SLURM_ACCOUNT"    [SLURM_PARTITION]="$SLURM_PARTITION"
+        [SLURM_TIME]="$SLURM_TIME"          [SLURM_GRES]="$SLURM_GRES"
+        [SLURM_MEM]="$SLURM_MEM"            [SLURM_CPUS]="$SLURM_CPUS"
         [SEED]="$seed"                      [STAGE_SAMPLES]="$STAGE_SAMPLES"
         [MODEL_NAME]="$MODEL_NAME"          [DATASET_NAME]="$DATASET_NAME"
         [BATCH_SIZE]="$BATCH_SIZE"          [GRAD_ACCUM]="$GRAD_ACCUM"
@@ -198,6 +248,10 @@ STAGE_EOF
         [MAX_PROMPT_LENGTH]="$MAX_PROMPT_LENGTH"
         [NUM_GENERATIONS]="$NUM_GENERATIONS"
         [REWARD_TYPE]="$REWARD_TYPE"
+        [NUM_TRAIN_EPOCHS]="$NUM_TRAIN_EPOCHS"
+        [SAVE_STRATEGY]="$SAVE_STRATEGY"
+        [SAVE_STEPS]="$SAVE_STEPS"
+        [SAVE_TOTAL_LIMIT]="$SAVE_TOTAL_LIMIT"
     )
     local -a sed_args=()
     local key
@@ -217,14 +271,30 @@ main() {
     [[ "$USER" == *[!/]* ]] || die "USER env is empty/invalid: '$USER'"
     [[ -n "$EXP_NAME" && "$EXP_NAME" != "/" ]] \
         || die "EXP_NAME empty or dangerous: '$EXP_NAME'"
+    [[ "$EXP_NAME" =~ ^[a-zA-Z0-9._-]+$ ]] \
+        || die "EXP_NAME must match [a-zA-Z0-9._-]+ (no spaces, pipes, or shell meta): '$EXP_NAME'"
     [[ "$CHAIN_DIR" == "/scratch/$USER/outputs/"* ]] \
         || die "CHAIN_DIR sanity check failed (must be under /scratch/\$USER/outputs/): $CHAIN_DIR"
 
+    # Refuse to clobber a populated CHAIN_DIR unless FORCE=1 is explicitly set.
+    if [[ -d "$CHAIN_DIR" ]] && [[ -n "$(ls -A "$CHAIN_DIR" 2>/dev/null)" ]]; then
+        if [[ "$FORCE" != "1" ]]; then
+            die "CHAIN_DIR is non-empty: $CHAIN_DIR
+  Refusing to rm -rf existing chain state.
+  To intentionally re-run from stage 1 (loses all prior adapters), set FORCE=1:
+    FORCE=1 bash $0"
+        fi
+        echo "[WARN] FORCE=1 set — deleting existing $CHAIN_DIR"
+    fi
+
     rm -rf "$CHAIN_DIR"
-    mkdir -p "$CHAIN_DIR" logs
+    mkdir -p "$CHAIN_DIR" "$LOGS_DIR"
 
     echo "=== CHAIN JOB SUBMISSION: $NUM_STAGES stages x $STAGE_SAMPLES samples ==="
-    echo "    EXP_NAME: $EXP_NAME  |  CHAIN_DIR: $CHAIN_DIR"
+    echo "    EXP_NAME:   $EXP_NAME"
+    echo "    CHAIN_DIR:  $CHAIN_DIR"
+    echo "    LOGS_DIR:   $LOGS_DIR"
+    echo "    Partition:  $SLURM_PARTITION  |  Time/stage: $SLURM_TIME"
     echo ""
 
     local prev_job_id=""

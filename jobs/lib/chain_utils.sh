@@ -97,14 +97,22 @@ save_stage_adapter() {
 }
 
 # ── DRAC training environment bootstrap ──────────────────────────────
-# Usage: bootstrap_training_env [venv_name]
+# Usage: bootstrap_training_env [venv_name] [venv_user]
 # Loads modules, activates venv, exports HF caches, loads project .env.
-# Default venv: hf_env. Pass hf_unsloth for Unsloth jobs, hf_trl_env for TRL, etc.
+#
+# Default venv: hf_env. Pass hf_unsloth for Unsloth jobs, hf_trl_env for TRL.
+# Default venv_user resolution order (first non-empty wins):
+#   1) 2nd positional arg
+#   2) $VENV_USER env var
+#   3) $USER (i.e. the running user's own /scratch/$USER/venvs/...)
+# Override with: VENV_USER=ermia bootstrap_training_env hf_env
+#            or: bootstrap_training_env hf_env ermia
 bootstrap_training_env() {
     local venv="${1:-hf_env}"
-    local venv_path="/scratch/ermia/venvs/${venv}"
+    local venv_user="${2:-${VENV_USER:-$USER}}"
+    local venv_path="/scratch/${venv_user}/venvs/${venv}"
 
-    [[ -d "$venv_path" ]] || stage_die "venv not found: $venv_path"
+    [[ -d "$venv_path" ]] || stage_die "venv not found: $venv_path (tried venv_user='$venv_user')"
 
     module load gcc arrow python/3.11.5
     # shellcheck disable=SC1091
@@ -115,8 +123,9 @@ bootstrap_training_env() {
     export TRANSFORMERS_CACHE="$HF_HOME/hub"
     export PYTHONUNBUFFERED=1
 
-    load_env_file "/project/6014832/ermia/HF-TRL/.env"
-    log_stage_info "Training env bootstrapped (venv=$venv)"
+    # Honor PROJECT_DIR if set by caller; otherwise fall back to the original HF-TRL path.
+    load_env_file "${PROJECT_DIR:-/project/6014832/ermia/HF-TRL}/.env"
+    log_stage_info "Training env bootstrapped (venv=$venv, user=$venv_user)"
 }
 
 # ── SLURM job submission ─────────────────────────────────────────────
