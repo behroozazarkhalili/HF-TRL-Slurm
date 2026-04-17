@@ -49,3 +49,11 @@ outputs/
 notebooks/output/
 notebooks/*-adapter/
 notebooks/*-merged/
+notebooks/*_lora/
+notebooks/*_merged/
+notebooks/*_gguf/
+notebooks/unsloth_compiled_cache/
+
+# Claude Code session-local state
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json

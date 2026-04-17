@@ -1,7 +1,64 @@
 #!/bin/bash
 # =============================================================================
-# Smoke test: 3-stage chain with 5 samples each
-# Uses reusable chain_utils.sh module for adapter resolution and env loading.
+# BLUEPRINT: Multi-stage GRPO chain training on DRAC Fir (SLURM + TRL)
+# =============================================================================
+#
+# What this template does:
+#   Generates and submits N sequential SLURM jobs (stages) that chain a
+#   GRPO training run — each stage continues from the previous stage's LoRA
+#   adapter, effectively splitting one long training into resumable segments.
+#
+# When to use this template:
+#   - GRPO/RLHF training with LoRA adapters on DRAC Fir.
+#   - When wall-time limits force a single long run into multiple sub-runs.
+#   - Any experiment where stage N+1 needs stage N's adapter.
+#
+# How to use:
+#   1. Copy this file to the target experiment name:
+#        cp jobs/templates/chain-training.template.sh jobs/my-experiment.sh
+#   2. Edit the "EDIT ME" block below (marked with # >>>>>).
+#   3. Run locally to submit the chain:
+#        bash jobs/my-experiment.sh
+#   4. Monitor: squeue -u $USER | grep <EXP_NAME>
+#
+# What gets derived automatically from EXP_NAME:
+#   - CHAIN_DIR         → /scratch/$USER/outputs/$EXP_NAME
+#   - SBATCH job-name   → <EXP_NAME>-stage-<N>
+#   - OUTPUT_DIR        → $CHAIN_DIR/stage<N>-<JOB_ID>
+#   - Monitor grep      → grep <EXP_NAME>
+#
+# Prerequisites:
+#   - $PROJECT_DIR/jobs/lib/chain_utils.sh exists (provides bootstrap_training_env,
+#     submit_job, resolve_prev_adapter_arg, save_stage_adapter, logging helpers).
+#   - Python venv at /scratch/ermia/venvs/hf_env (override via bootstrap_training_env arg).
+#   - train_grpo.py at TRAIN_GRPO_SCRIPT path below.
+#   - $PROJECT_DIR/.env with HF_TOKEN etc.
+#
+# Safety:
+#   - `rm -rf "$CHAIN_DIR"` is guarded by 3 invariant checks (USER non-empty,
+#     EXP_NAME non-empty, CHAIN_DIR under /scratch/$USER/outputs/).
+#   - Each generated stage script is `bash -n`-checked before submission.
+#
+# Architecture:
+#   outer generator (this script)
+#     ├─ sources chain_utils.sh                 # submit_job, logging
+#     ├─ for each stage:
+#     │     generate_stage_script()              # heredoc + sed placeholder injection
+#     │     submit_job() with afterok dependency # from chain_utils.sh
+#     └─ prints stage→job mapping for monitoring
+#
+#   each generated stage script
+#     ├─ sources chain_utils.sh
+#     ├─ bootstrap_training_env()                # module load + venv + HF_HOME + .env
+#     ├─ resolve_prev_adapter_arg()              # reads stage-N-1.adapter pointer
+#     ├─ python train_grpo.py --flags...         # training
+#     └─ save_stage_adapter()                    # writes stage-N.adapter pointer
+#
+# Extending the template:
+#   - Add a new CLI flag: edit the heredoc + add the placeholder to `subs` array.
+#   - Change SBATCH resources: edit the #SBATCH lines in the heredoc (time, mem,
+#     --gres, --partition). These are stage-specific, not derived.
+#   - Different venv (Unsloth, TRL): bootstrap_training_env hf_unsloth
 # =============================================================================
 
 set -euo pipefail
@@ -10,18 +67,25 @@ set -euo pipefail
 readonly PROJECT_DIR="/project/6014832/ermia/HF-TRL"
 readonly CHAIN_UTILS="$PROJECT_DIR/jobs/lib/chain_utils.sh"
 
-# Single source of truth — rename EXP_NAME to rename the whole experiment.
+# >>>>> EDIT ME: experiment identity (single source of truth) >>>>>>>>>
+# Rename EXP_NAME alone to retarget the whole chain — CHAIN_DIR,
+# SBATCH --job-name, OUTPUT_DIR, and the monitor command all follow.
 readonly EXP_NAME="granite-chain-5sample"
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
 readonly CHAIN_DIR="/scratch/$USER/outputs/$EXP_NAME"
 readonly JOB_NAME_PREFIX="$EXP_NAME"
 readonly TRAIN_GRPO_SCRIPT="$PROJECT_DIR/.claude/skills/slurm-model-trainer/scripts/train_grpo.py"
 
+# >>>>> EDIT ME: model + dataset + chain structure >>>>>>>>>>>>>>>>>>>>
 readonly MODEL_NAME='ibm-granite/granite-4.0-micro'
 readonly DATASET_NAME='AI-MO/NuminaMath-CoT'
 readonly NUM_STAGES=3
 readonly BASE_SEED=42
-readonly STAGE_SAMPLES=5
+readonly STAGE_SAMPLES=5          # samples per stage (5 = smoke; use 2000+ for real)
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
+# >>>>> EDIT ME: training hyperparameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 readonly BATCH_SIZE=2
 readonly GRAD_ACCUM=1
 readonly LEARNING_RATE=1e-06
@@ -31,6 +95,7 @@ readonly MAX_COMPLETION_LENGTH=512
 readonly MAX_PROMPT_LENGTH=256
 readonly NUM_GENERATIONS=2
 readonly REWARD_TYPE='combined'
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # ── Load shared chain helpers (submit_job, log helpers) ──────────────
 [[ -r "$CHAIN_UTILS" ]] || { printf 'ERROR: chain_utils.sh not found at %s\n' "$CHAIN_UTILS" >&2; exit 1; }
@@ -158,7 +223,7 @@ main() {
     rm -rf "$CHAIN_DIR"
     mkdir -p "$CHAIN_DIR" logs
 
-    echo "=== CHAIN SMOKE TEST: $NUM_STAGES stages x $STAGE_SAMPLES samples ==="
+    echo "=== CHAIN JOB SUBMISSION: $NUM_STAGES stages x $STAGE_SAMPLES samples ==="
     echo "    EXP_NAME: $EXP_NAME  |  CHAIN_DIR: $CHAIN_DIR"
     echo ""
 
