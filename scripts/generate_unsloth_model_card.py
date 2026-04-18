@@ -14,8 +14,8 @@ from huggingface_hub import HfApi
 
 MODELS = {
     # SFT Distillation (Claude Reasoning Traces)
-    "ermiaazarkhalili/Qwen3.5-0.8B-SFT-Claude-Reasoning-Unsloth": {
-        "display_name": "Qwen3.5-0.8B-SFT-Claude-Reasoning-Unsloth",
+    "ermiaazarkhalili/Qwen3.5-0.8B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "Qwen3.5-0.8B-SFT-Claude-Opus-Reasoning-Unsloth",
         "base_model": "Qwen/Qwen3.5-0.8B",
         "base_model_name": "Qwen3.5-0.8B",
         "params": "0.8B",
@@ -28,8 +28,8 @@ MODELS = {
         "unsloth_class": "FastLanguageModel",
         "chat_template": "built-in Qwen3.5",
     },
-    "ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Reasoning-Unsloth": {
-        "display_name": "LFM2.5-1.2B-SFT-Claude-Reasoning-Unsloth",
+    "ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "LFM2.5-1.2B-SFT-Claude-Opus-Reasoning-Unsloth",
         "base_model": "LiquidAI/LFM2.5-1.2B-Instruct",
         "base_model_name": "LFM2.5-1.2B-Instruct",
         "params": "1.2B",
@@ -42,8 +42,8 @@ MODELS = {
         "unsloth_class": "FastLanguageModel",
         "chat_template": "LFM2.5 (chatml)",
     },
-    "ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Reasoning-Unsloth": {
-        "display_name": "Gemma4-E2B-SFT-Claude-Reasoning-Unsloth",
+    "ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "Gemma4-E2B-SFT-Claude-Opus-Reasoning-Unsloth",
         "base_model": "google/gemma-4-E2B-it",
         "base_model_name": "Gemma4-E2B-it",
         "params": "2B",

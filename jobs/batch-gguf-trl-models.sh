@@ -58,9 +58,9 @@ echo ""
 # Format: HUB_ID|BASE_MODEL|TYPE|METHOD|DATASET|LICENSE|SHORT_NAME|OUTPUT_REPO
 MODELS=(
     # ── SFT Distillation (Claude Reasoning) ──
-    "ermiaazarkhalili/Qwen3.5-0.8B-SFT-Claude-Reasoning|Qwen/Qwen3.5-0.8B|full|SFT-Distillation|Claude-Reasoning|apache-2.0|qwen35-08b-sft-claude-trl|ermiaazarkhalili/Qwen3.5-0.8B-SFT-Claude-Reasoning-GGUF"
-    "ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Reasoning|LiquidAI/LFM2.5-1.2B-Instruct|full|SFT-Distillation|Claude-Reasoning|apache-2.0|lfm25-12b-sft-claude-trl|ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Reasoning-GGUF"
-    "ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Reasoning|google/gemma-4-E2B-it|full|SFT-Distillation|Claude-Reasoning|gemma|gemma4-e2b-sft-claude-trl|ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Reasoning-GGUF"
+    "ermiaazarkhalili/Qwen3.5-0.8B-SFT-Claude-Opus-Reasoning|Qwen/Qwen3.5-0.8B|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|qwen35-08b-sft-claude-trl|ermiaazarkhalili/Qwen3.5-0.8B-SFT-Claude-Opus-Reasoning-GGUF"
+    "ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Opus-Reasoning|LiquidAI/LFM2.5-1.2B-Instruct|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|lfm25-12b-sft-claude-trl|ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Opus-Reasoning-GGUF"
+    "ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Opus-Reasoning|google/gemma-4-E2B-it|full|SFT-Distillation|Claude-Opus-Reasoning|gemma|gemma4-e2b-sft-claude-trl|ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Opus-Reasoning-GGUF"
 
     # ── xLAM Function Calling ──
     "ermiaazarkhalili/Qwen3.5-0.8B-Function-Calling-xLAM|Qwen/Qwen3.5-0.8B|full|SFT|xLAM-60K|apache-2.0|qwen35-08b-xlam-trl|ermiaazarkhalili/Qwen3.5-0.8B-Function-Calling-xLAM-GGUF"

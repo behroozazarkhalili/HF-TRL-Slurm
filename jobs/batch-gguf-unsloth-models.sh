@@ -59,9 +59,9 @@ echo ""
 # All models are full (merged) — no LoRA merge needed
 MODELS=(
     # ── SFT Distillation (Claude Reasoning) ──
-    "ermiaazarkhalili/Qwen3.5-0.8B-SFT-Claude-Reasoning-Unsloth|Qwen/Qwen3.5-0.8B|full|SFT-Distillation|Claude-Reasoning|apache-2.0|qwen35-08b-sft-claude-unsloth|ermiaazarkhalili/Qwen3.5-0.8B-SFT-Claude-Reasoning-Unsloth-GGUF"
-    "ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Reasoning-Unsloth|LiquidAI/LFM2.5-1.2B-Instruct|full|SFT-Distillation|Claude-Reasoning|apache-2.0|lfm25-12b-sft-claude-unsloth|ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Reasoning-Unsloth-GGUF"
-    "ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Reasoning-Unsloth|google/gemma-4-E2B-it|full|SFT-Distillation|Claude-Reasoning|gemma|gemma4-e2b-sft-claude-unsloth|ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Reasoning-Unsloth-GGUF"
+    "ermiaazarkhalili/Qwen3.5-0.8B-SFT-Claude-Opus-Reasoning-Unsloth|Qwen/Qwen3.5-0.8B|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|qwen35-08b-sft-claude-unsloth|ermiaazarkhalili/Qwen3.5-0.8B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
+    "ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Opus-Reasoning-Unsloth|LiquidAI/LFM2.5-1.2B-Instruct|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|lfm25-12b-sft-claude-unsloth|ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
+    "ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Opus-Reasoning-Unsloth|google/gemma-4-E2B-it|full|SFT-Distillation|Claude-Opus-Reasoning|gemma|gemma4-e2b-sft-claude-unsloth|ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
 
     # ── xLAM Function Calling ──
     "ermiaazarkhalili/Qwen3.5-0.8B-Function-Calling-xLAM-Unsloth|Qwen/Qwen3.5-0.8B|full|SFT|xLAM-60K|apache-2.0|qwen35-08b-xlam-unsloth|ermiaazarkhalili/Qwen3.5-0.8B-Function-Calling-xLAM-Unsloth-GGUF"
