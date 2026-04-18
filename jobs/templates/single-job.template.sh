@@ -80,6 +80,7 @@
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
 #SBATCH --partition=gpubase_bygpu_b5
+#SBATCH --exclude=fc10713  # Broken MIG config on this node; remove once DRAC repairs
 #SBATCH --output=/project/6014832/ermia/HF-TRL/logs/%x-%j.out
 #SBATCH --error=/project/6014832/ermia/HF-TRL/logs/%x-%j.err
 #SBATCH --mail-type=BEGIN,END,FAIL

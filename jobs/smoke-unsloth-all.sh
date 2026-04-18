@@ -22,13 +22,14 @@ NOTEBOOKS=(
     "xlam_function_calling_lfm2.5-1.2b_unsloth|smoke-unsloth-xlam-lfm25-12b|32G|0-01:00:00"
     "xlam_function_calling_gemma4-e2b_unsloth|smoke-unsloth-xlam-gemma4-e2b|32G|0-01:00:00"
     "xlam_function_calling_gemma4-e4b_unsloth|smoke-unsloth-xlam-gemma4-e4b|40G|0-01:30:00"
-    "xlam_function_calling_gemma4-26b-a4b_unsloth|smoke-unsloth-xlam-gemma4-26b-a4b|64G|0-01:30:00"
+    # gemma4-26b-a4b REMOVED 2026-04-17: MoE 26B does not fit 3g.40gb MIG slice
+    # (bnb-4bit dispatches to CPU). Needs full H100 80GB or future `--gres=nvidia_h100_80gb_hbm3:1`.
     "xlam_function_calling_gemma4-31b_unsloth|smoke-unsloth-xlam-gemma4-31b|64G|0-01:30:00"
     "xlam_function_calling_carnice-9b_unsloth|smoke-unsloth-xlam-carnice-9b|40G|0-01:30:00"
     "sft_distillation_qwen3.5_unsloth|smoke-unsloth-sft-qwen35|32G|0-01:00:00"
     "sft_distillation_lfm2.5_unsloth|smoke-unsloth-sft-lfm25|32G|0-01:00:00"
     "sft_distillation_gemma4_unsloth|smoke-unsloth-sft-gemma4|32G|0-01:00:00"
-    "sft_distillation_gemma4-26b-a4b_unsloth|smoke-unsloth-sft-gemma4-26b-a4b|64G|0-01:30:00"
+    # sft gemma4-26b-a4b REMOVED 2026-04-17: see xlam entry comment above
     "sft_distillation_gemma4-31b_unsloth|smoke-unsloth-sft-gemma4-31b|64G|0-01:30:00"
     "sft_distillation_carnice-9b_unsloth|smoke-unsloth-sft-carnice-9b|40G|0-01:30:00"
 )
@@ -64,6 +65,7 @@ for entry in "${NOTEBOOKS[@]}"; do
 #SBATCH --mem=__MEM__
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
 #SBATCH --partition=gpubase_bygpu_b1
+#SBATCH --exclude=fc10713
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 

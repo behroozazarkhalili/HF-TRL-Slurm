@@ -54,6 +54,12 @@ notebooks/*_merged/
 notebooks/*_gguf/
 notebooks/unsloth_compiled_cache/
 
+# GGUF binaries anywhere (can be multi-GB)
+*.gguf
+
+# Unsloth compile cache (also at repo root after some notebook runs)
+/unsloth_compiled_cache/
+
 # Claude Code session-local state
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json

@@ -59,6 +59,7 @@ for entry in "${NOTEBOOKS[@]}"; do
 #SBATCH --mem=__MEM__
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
 #SBATCH --partition=gpubase_bygpu_b5
+#SBATCH --exclude=fc10713
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 #SBATCH --mail-type=BEGIN,END,FAIL

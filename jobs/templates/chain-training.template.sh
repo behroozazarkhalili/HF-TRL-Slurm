@@ -168,6 +168,7 @@ generate_stage_script() {
 #SBATCH --mem=__SLURM_MEM__
 #SBATCH --gres=__SLURM_GRES__
 #SBATCH --partition=__SLURM_PARTITION__
+#SBATCH --exclude=fc10713  # Broken MIG config on this node; remove once DRAC repairs
 #SBATCH --output=__LOGS_DIR__/%x-%j.out
 #SBATCH --error=__LOGS_DIR__/%x-%j.err
 
