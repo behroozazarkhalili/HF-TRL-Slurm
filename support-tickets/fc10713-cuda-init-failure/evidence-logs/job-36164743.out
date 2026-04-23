@@ -1,0 +1,14 @@
+==========================================
+GGUF recovery: Gemma4-E4B-Function-Calling-xLAM-Unsloth
+  Reason: 36017371 pushed merged (Apr 20 03:05) but SIGKILL'd at push_to_hub_gguf
+    (second-pass conversion exceeded 40G MIG memory after first pass succeeded).
+  Current state: NO .gguf files on Hub; retry with 56G mem.
+  Gemma4 is a genuine VLM — llama.cpp's MMPROJ path MAY conflict.
+  Fallback strategy: try 6 quants first, on failure try 3 quants (q4/q5/q8 only).
+Node: fc10713 | Job: 36164743 | Start: Mon Apr 20 09:19:12 AM PDT 2026
+==========================================
+
+==========================================
+[FAIL] exit 1  (both 6-quant and 3-quant attempts failed)
+End: Mon Apr 20 09:19:19 AM PDT 2026
+==========================================

@@ -1,0 +1,14 @@
+/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/torch/cuda/__init__.py:182: UserWarning: CUDA initialization: CUDA unknown error - this may be due to an incorrectly set up environment, e.g. changing env variable CUDA_VISIBLE_DEVICES after program start. Setting the available devices to be zero. (Triggered internally at /tmp/build_wheels_tmp.6038/python-3.11/torch/c10/cuda/CUDAFunctions.cpp:119.)
+  return torch._C._cuda_getDeviceCount() > 0
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/unsloth/__init__.py", line 105, in <module>
+    import unsloth_zoo
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/unsloth_zoo/__init__.py", line 220, in <module>
+    from .device_type import (
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/unsloth_zoo/device_type.py", line 231, in <module>
+    DEVICE_TYPE : str = get_device_type()
+                        ^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/unsloth_zoo/device_type.py", line 218, in get_device_type
+    raise NotImplementedError("Unsloth cannot find any torch accelerator? You need a GPU.")
+NotImplementedError: Unsloth cannot find any torch accelerator? You need a GPU.

@@ -1,0 +1,7 @@
+=== SMOKE: xlam_function_calling_carnice-9b_unsloth ===
+Node: fc10713 | Start: Fri Apr 17 09:54:38 AM PDT 2026 | Job: 35349578
+[OK] Patched SMOKE_TEST=True
+[....] Running smoke test via papermill ...
+
+[FAIL] SMOKE FAILED: xlam_function_calling_carnice-9b_unsloth (exit 1)
+End: Fri Apr 17 09:55:07 AM PDT 2026

@@ -1,0 +1,8 @@
+==========================================
+UNSLOTH SMOKE (RESUBMIT): sft_distillation_gemma4-26b-a4b_unsloth
+==========================================
+Node: fc10713 | Job: 35598063 | Start: Fri Apr 17 09:58:25 AM PDT 2026
+[OK] Patched SMOKE_TEST=True
+==========================================
+[FAIL] exit 1
+End: Fri Apr 17 09:58:38 AM PDT 2026

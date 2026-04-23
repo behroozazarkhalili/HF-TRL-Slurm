@@ -1,0 +1,336 @@
+Input Notebook:  /scratch/ermia/outputs/unsloth-smoke-g4-resubmit-20260417-0955/xlam_function_calling_gemma4-26b-a4b_unsloth_smoke_input.ipynb
+Output Notebook: /scratch/ermia/outputs/unsloth-smoke-g4-resubmit-20260417-0955/xlam_function_calling_gemma4-26b-a4b_unsloth_smoke_output.ipynb
+Working directory: /project/6014832/ermia/HF-TRL/notebooks
+/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/nbformat/__init__.py:96: MissingIDFieldWarning: Cell is missing an id field, this will become a hard error in future nbformat versions. You may want to use `normalize()` on your notebooks before validations (available since nbformat 5.1.4). Previous versions of nbformat are fixing this issue transparently, and will stop doing so in the future.
+  validate(nb)
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Executing:   0%|          | 0/11 [00:00<?, ?cell/s]Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': None,
+                            'end_time': None,
+                            'exception': None,
+                            'start_time': None,
+                            'status': 'pending'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Executing notebook with kernel: python3
+Executing Cell 1---------------------------------------
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': None,
+                            'end_time': None,
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'running'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Ending Cell 1------------------------------------------
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Executing:   9%|▉         | 1/11 [00:02<00:28,  2.86s/cell]Executing Cell 2---------------------------------------
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Ending Cell 2------------------------------------------
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Executing Cell 3---------------------------------------
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+[OK] Model: unsloth/gemma-4-26B-A4B-it
+[OK] SMOKE_TEST: True, max_steps: 5
+[OK] PyTorch: 2.9.0
+[OK] GPU: N/A
+
+/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/torch/cuda/__init__.py:182: UserWarning: CUDA initialization: CUDA unknown error - this may be due to an incorrectly set up environment, e.g. changing env variable CUDA_VISIBLE_DEVICES after program start. Setting the available devices to be zero. (Triggered internally at /tmp/build_wheels_tmp.6038/python-3.11/torch/c10/cuda/CUDAFunctions.cpp:119.)
+  return torch._C._cuda_getDeviceCount() > 0
+
+Ending Cell 3------------------------------------------
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Executing:  27%|██▋       | 3/11 [00:05<00:15,  1.90s/cell]Executing Cell 4---------------------------------------
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Note: Environment variable`HF_TOKEN` is set and is the current active token independently from the token you've just configured.
+
+[OK] Authenticated with HF Hub
+
+Ending Cell 4------------------------------------------
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Executing:  36%|███▋      | 4/11 [00:06<00:11,  1.58s/cell]Executing Cell 5---------------------------------------
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Ending Cell 5------------------------------------------
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Executing:  45%|████▌     | 5/11 [00:07<00:07,  1.32s/cell]Executing:  45%|████▌     | 5/11 [00:08<00:09,  1.66s/cell]
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][0]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Notebook JSON is invalid: Additional properties are not allowed ('outputs' was unexpected)
+
+Failed validating 'additionalProperties' in markdown_cell:
+
+On instance['cells'][1]:
+{'cell_type': 'markdown',
+ 'id': '897827c3',
+ 'metadata': {'papermill': {'duration': 0.055084,
+                            'end_time': '2026-04-17T17:02:18.718341+00:00',
+                            'exception': False,
+                            'start_time': '2026-04-17T17:02:18.663257+00:00',
+                            'status': 'completed'},
+              'tags': []},
+ 'outputs': ['...0 outputs...'],
+ 'source': '# Function Calling Fine-Tuning: Gemma4-26B-A4B on xLAM Dataset '
+           '(...'}
+Traceback (most recent call last):
+  File "/scratch/ermia/venvs/hf_unsloth/bin/papermill", line 8, in <module>
+    sys.exit(papermill())
+             ^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/click/core.py", line 1485, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/click/core.py", line 1406, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/click/core.py", line 1269, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/click/core.py", line 824, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/click/decorators.py", line 34, in new_func
+    return f(get_current_context(), *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/papermill/cli.py", line 235, in papermill
+    execute_notebook(
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/papermill/execute.py", line 131, in execute_notebook
+    raise_for_execution_errors(nb, output_path)
+  File "/scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/papermill/execute.py", line 251, in raise_for_execution_errors
+    raise error
+papermill.exceptions.PapermillExecutionError: 
+---------------------------------------------------------------------------
+Exception encountered at "In [4]":
+---------------------------------------------------------------------------
+NotImplementedError                       Traceback (most recent call last)
+Cell In[4], line 4
+      1 # ============================================================================
+      2 # Load Model with Unsloth
+      3 # ============================================================================
+----> 4 from unsloth import FastModel
+      6 model, tokenizer = FastModel.from_pretrained(
+      7     model_name=MODEL_NAME,
+      8     max_seq_length=MAX_SEQ_LENGTH,
+   (...)     11     full_finetuning=False,
+     12 )
+     13 print(f"[OK] Model loaded: {MODEL_NAME}")
+
+File /scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/unsloth/__init__.py:105
+     93         print(
+     94             "Unsloth: Please update Unsloth and Unsloth-Zoo to the latest version!\n"
+     95             "Do this via `pip install --upgrade --force-reinstall --no-cache-dir --no-deps unsloth unsloth_zoo`"
+     96         )
+     97         # if os.environ.get("UNSLOTH_DISABLE_AUTO_UPDATES", "0") == "0":
+     98         #     try:
+     99         #         os.system("pip install --upgrade --no-cache-dir --no-deps unsloth_zoo")
+   (...)    103         #         except:
+    104         #             raise ImportError("Unsloth: Please update unsloth_zoo via `pip install --upgrade --no-cache-dir --no-deps unsloth_zoo`")
+--> 105     import unsloth_zoo
+    106 except PackageNotFoundError:
+    107     raise ImportError(
+    108         f"Unsloth: Please install unsloth_zoo via `pip install unsloth_zoo` then retry!"
+    109     )
+
+File /scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/unsloth_zoo/__init__.py:220
+    217 del logging, torchao_logger, HideLoggingMessage
+    219 # Get device types and other variables
+--> 220 from .device_type import (
+    221     is_hip,
+    222     get_device_type,
+    223     DEVICE_TYPE,
+    224     DEVICE_TYPE_TORCH,
+    225     DEVICE_COUNT,
+    226     ALLOW_PREQUANTIZED_MODELS,
+    227 )
+    228 IS_HIP_RUNTIME = (DEVICE_TYPE == "hip") or bool(is_hip())
+    230 # Torch >= 2.9 uses PYTORCH_ALLOC_CONF and treats legacy per-backend vars as deprecated.
+
+File /scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/unsloth_zoo/device_type.py:231
+    229     raise NotImplementedError("Unsloth currently only works on NVIDIA, AMD and Intel GPUs.")
+    230 pass
+--> 231 DEVICE_TYPE : str = get_device_type()
+    232 # HIP fails for autocast and other torch functions. Use CUDA instead
+    233 DEVICE_TYPE_TORCH = DEVICE_TYPE
+
+File /scratch/ermia/venvs/hf_unsloth/lib/python3.11/site-packages/unsloth_zoo/device_type.py:218, in get_device_type()
+    216     if amd_hint is not None:
+    217         raise NotImplementedError(amd_hint)
+--> 218     raise NotImplementedError("Unsloth cannot find any torch accelerator? You need a GPU.")
+    219 accelerator = str(torch.accelerator.current_accelerator())
+    220 if accelerator in ("cuda", "xpu", "hip"):
+
+NotImplementedError: Unsloth cannot find any torch accelerator? You need a GPU.
+
