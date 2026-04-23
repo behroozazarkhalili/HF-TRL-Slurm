@@ -35,6 +35,7 @@ NOTEBOOKS=(
     "sft_distillation_lfm2.5_unsloth|smoke-unsloth-sft-lfm25|32G|0-01:00:00"
     "sft_distillation_lfm2.5-350m_unsloth|smoke-unsloth-sft-lfm25-350m|32G|0-01:00:00"
     "sft_distillation_gemma4_unsloth|smoke-unsloth-sft-gemma4|32G|0-01:00:00"
+    "sft_distillation_gemma4-e4b_unsloth|smoke-unsloth-sft-gemma4-e4b|40G|0-01:30:00"
     # sft gemma4-26b-a4b REMOVED 2026-04-17: see xlam entry comment above
     # sft gemma4-31b REMOVED 2026-04-18: see xlam entry comment above
     "sft_distillation_carnice-9b_unsloth|smoke-unsloth-sft-carnice-9b|40G|0-01:30:00"

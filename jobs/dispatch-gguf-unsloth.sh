@@ -34,6 +34,7 @@ MODELS=(
     "ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Opus-Reasoning-Unsloth|LiquidAI/LFM2.5-1.2B-Instruct|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|lfm25-12b-sft-claude-unsloth|ermiaazarkhalili/LFM2.5-1.2B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
     "ermiaazarkhalili/LFM2.5-350M-SFT-Claude-Opus-Reasoning-Unsloth|LiquidAI/LFM2.5-350M|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|lfm25-350m-sft-claude-unsloth|ermiaazarkhalili/LFM2.5-350M-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
     "ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Opus-Reasoning-Unsloth|google/gemma-4-E2B-it|full|SFT-Distillation|Claude-Opus-Reasoning|gemma|gemma4-e2b-sft-claude-unsloth|ermiaazarkhalili/Gemma4-E2B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
+    "ermiaazarkhalili/Gemma4-E4B-SFT-Claude-Opus-Reasoning-Unsloth|google/gemma-4-E4B-it|full|SFT-Distillation|Claude-Opus-Reasoning|gemma|gemma4-e4b-sft-claude-unsloth|ermiaazarkhalili/Gemma4-E4B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
     "ermiaazarkhalili/Qwen3-4B-SFT-Claude-Opus-Reasoning-Unsloth|unsloth/Qwen3-4B|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|qwen3-4b-sft-claude-unsloth|ermiaazarkhalili/Qwen3-4B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
     "ermiaazarkhalili/Qwen3-8B-SFT-Claude-Opus-Reasoning-Unsloth|unsloth/Qwen3-8B|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|qwen3-8b-sft-claude-unsloth|ermiaazarkhalili/Qwen3-8B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
 

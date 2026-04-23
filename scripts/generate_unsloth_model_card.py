@@ -56,6 +56,20 @@ MODELS = {
         "unsloth_class": "FastModel",
         "chat_template": "gemma-4",
     },
+    "ermiaazarkhalili/Gemma4-E4B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "Gemma4-E4B-SFT-Claude-Opus-Reasoning-Unsloth",
+        "base_model": "google/gemma-4-E4B-it",
+        "base_model_name": "Gemma4-E4B-it",
+        "params": "4B",
+        "task": "sft_distillation",
+        "dataset": "ermiaazarkhalili/claude-reasoning-distillation",
+        "dataset_name": "Claude Reasoning Distillation",
+        "dataset_samples": "10,477",
+        "license": "gemma",
+        "model_family": "gemma4",
+        "unsloth_class": "FastModel",
+        "chat_template": "gemma-4",
+    },
     # xLAM Function Calling
     "ermiaazarkhalili/Qwen3.5-0.8B-Function-Calling-xLAM-Unsloth": {
         "display_name": "Qwen3.5-0.8B-Function-Calling-xLAM-Unsloth",

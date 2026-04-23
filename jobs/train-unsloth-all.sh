@@ -38,6 +38,7 @@ NOTEBOOKS=(
     "sft_distillation_lfm2.5_unsloth|unsloth-sft-lfm25|32G|gpubase_bygpu_b1|0-01:00:00"
     "sft_distillation_lfm2.5-350m_unsloth|unsloth-sft-lfm25-350m|32G|gpubase_bygpu_b1|0-01:00:00"
     "sft_distillation_gemma4_unsloth|unsloth-sft-gemma4|32G|gpubase_bygpu_b2|0-02:00:00"
+    "sft_distillation_gemma4-e4b_unsloth|unsloth-sft-gemma4-e4b|40G|gpubase_bygpu_b2|0-03:00:00"
     # Carnice-9B SFT: 1200 steps × 11 s/step × 1.3 + 45min overhead = 5h45m → 6h safety margin
     "sft_distillation_carnice-9b_unsloth|unsloth-sft-carnice-9b|40G|gpubase_bygpu_b2|0-06:00:00"
     # Qwen3.5-{4,9}B — Jackrong recipe (r=64, alpha=64, +out_proj), VLM-arch
