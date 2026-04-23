@@ -39,9 +39,89 @@ def ensure_tools(llama_cpp_dir: Path) -> tuple[Path, Path]:
     return quantize, convert
 
 
+def _probe_tokenizer(model_dir: Path) -> tuple[bool, str]:
+    """Try AutoTokenizer.from_pretrained(model_dir). Return (ok, error_msg)."""
+    from transformers import AutoTokenizer
+    try:
+        AutoTokenizer.from_pretrained(str(model_dir), trust_remote_code=True)
+        return True, ""
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
+def _infer_fallback_class(model_dir: Path) -> str | None:
+    """Pick a substitute tokenizer_class based on which tokenizer files exist.
+
+    transformers ships three standard base classes that cover 99% of
+    HF Hub models without vendor-specific code:
+      - PreTrainedTokenizerFast : any `tokenizer.json` (BPE, Unigram, WordPiece)
+      - LlamaTokenizer          : `tokenizer.model` + SentencePiece
+      - GPT2Tokenizer           : `vocab.json` + `merges.txt`
+    Returns None if nothing fits (caller should bail).
+    """
+    if (model_dir / "tokenizer.json").is_file():
+        return "PreTrainedTokenizerFast"
+    if (model_dir / "tokenizer.model").is_file():
+        return "LlamaTokenizer"
+    if (model_dir / "vocab.json").is_file() and (model_dir / "merges.txt").is_file():
+        return "GPT2Tokenizer"
+    return None
+
+
+def patch_tokenizer_class(model_dir: Path) -> None:
+    """Ensure the model dir's tokenizer loads via AutoTokenizer in the current env.
+
+    Capability-probe, not allowlist: we actually attempt to load the tokenizer,
+    and only rewrite `tokenizer_class` if the probe fails. Generalizes to ANY
+    vendor whose tokenizer_config.json names a class that:
+      (a) is not in transformers, AND
+      (b) has no remote code (auto_map) — or remote code fails to load.
+
+    Substitute class is inferred from the files present (not hard-coded).
+    Original config is backed up to tokenizer_config.json.orig for auditability.
+    """
+    cfg_path = model_dir / "tokenizer_config.json"
+    if not cfg_path.is_file():
+        return
+
+    ok, err = _probe_tokenizer(model_dir)
+    if ok:
+        return  # Tokenizer already loads — no patch needed.
+
+    import json
+    cfg = json.loads(cfg_path.read_text())
+    original_cls = cfg.get("tokenizer_class", "<unset>")
+
+    fallback = _infer_fallback_class(model_dir)
+    if fallback is None:
+        sys.exit(
+            f"[FATAL] Tokenizer at {model_dir} does not load and no fallback "
+            f"class fits the files present. Error: {err}"
+        )
+
+    backup = cfg_path.with_suffix(".json.orig")
+    if not backup.is_file():
+        backup.write_text(cfg_path.read_text())
+
+    print(f"[patch] tokenizer_class: {original_cls!r} → {fallback!r} "
+          f"(probe failed: {err.splitlines()[0][:140]})", flush=True)
+    cfg["tokenizer_class"] = fallback
+    # Strip auto_map pointers to custom classes — they'll be tried again
+    # by AutoTokenizer and would re-trigger the same failure.
+    cfg.pop("auto_map", None)
+    cfg_path.write_text(json.dumps(cfg, indent=2))
+
+    ok2, err2 = _probe_tokenizer(model_dir)
+    if not ok2:
+        # Restore backup so we don't leave the model in a broken intermediate state.
+        cfg_path.write_text(backup.read_text())
+        sys.exit(f"[FATAL] Patched tokenizer_class={fallback!r} still fails: {err2}")
+
+
 def materialize_model(model_id: str, work_dir: Path, base_model: str | None) -> Path:
     """Return a local directory containing a merged model ready for GGUF conversion."""
     if Path(model_id).is_dir():
+        patch_tokenizer_class(Path(model_id))
         return Path(model_id)
 
     from huggingface_hub import snapshot_download
@@ -60,6 +140,7 @@ def materialize_model(model_id: str, work_dir: Path, base_model: str | None) -> 
             "tokenizer*", "special_tokens*",
         ],
     )
+    patch_tokenizer_class(target)
 
     adapter_cfg = target / "adapter_config.json"
     if adapter_cfg.is_file():
@@ -83,6 +164,7 @@ def merge_lora(adapter_dir: Path, base_model: str, work_dir: Path) -> Path:
     model = model.merge_and_unload()
     model.save_pretrained(str(merged))
     AutoTokenizer.from_pretrained(base_model, trust_remote_code=True).save_pretrained(str(merged))
+    patch_tokenizer_class(merged)
     return merged
 
 
