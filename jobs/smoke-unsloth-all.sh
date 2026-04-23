@@ -19,7 +19,10 @@ mkdir -p "$OUTPUT_DIR" logs
 NOTEBOOKS=(
     "xlam_function_calling_qwen3.5-0.8b_unsloth|smoke-unsloth-xlam-qwen35-08b|32G|0-01:00:00"
     "xlam_function_calling_qwen3.5-2b_unsloth|smoke-unsloth-xlam-qwen35-2b|32G|0-01:00:00"
+    "xlam_function_calling_qwen3-4b_unsloth|smoke-unsloth-xlam-qwen3-4b|32G|0-01:00:00"
+    "xlam_function_calling_qwen3-8b_unsloth|smoke-unsloth-xlam-qwen3-8b|40G|0-01:30:00"
     "xlam_function_calling_lfm2.5-1.2b_unsloth|smoke-unsloth-xlam-lfm25-12b|32G|0-01:00:00"
+    "xlam_function_calling_lfm2.5-350m_unsloth|smoke-unsloth-xlam-lfm25-350m|32G|0-01:00:00"
     "xlam_function_calling_gemma4-e2b_unsloth|smoke-unsloth-xlam-gemma4-e2b|32G|0-01:00:00"
     "xlam_function_calling_gemma4-e4b_unsloth|smoke-unsloth-xlam-gemma4-e4b|40G|0-01:30:00"
     # gemma4-26b-a4b REMOVED 2026-04-17: MoE 26B does not fit 3g.40gb MIG slice
@@ -27,7 +30,10 @@ NOTEBOOKS=(
     # gemma4-31b REMOVED 2026-04-18: 31B dense OOM on 40GB MIG slice. Path B (N=1 epoch) excludes.
     "xlam_function_calling_carnice-9b_unsloth|smoke-unsloth-xlam-carnice-9b|40G|0-01:30:00"
     "sft_distillation_qwen3.5_unsloth|smoke-unsloth-sft-qwen35|32G|0-01:00:00"
+    "sft_distillation_qwen3-4b_unsloth|smoke-unsloth-sft-qwen3-4b|32G|0-01:00:00"
+    "sft_distillation_qwen3-8b_unsloth|smoke-unsloth-sft-qwen3-8b|40G|0-01:30:00"
     "sft_distillation_lfm2.5_unsloth|smoke-unsloth-sft-lfm25|32G|0-01:00:00"
+    "sft_distillation_lfm2.5-350m_unsloth|smoke-unsloth-sft-lfm25-350m|32G|0-01:00:00"
     "sft_distillation_gemma4_unsloth|smoke-unsloth-sft-gemma4|32G|0-01:00:00"
     # sft gemma4-26b-a4b REMOVED 2026-04-17: see xlam entry comment above
     # sft gemma4-31b REMOVED 2026-04-18: see xlam entry comment above
