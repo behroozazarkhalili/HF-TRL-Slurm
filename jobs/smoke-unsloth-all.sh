@@ -38,6 +38,13 @@ NOTEBOOKS=(
     # sft gemma4-26b-a4b REMOVED 2026-04-17: see xlam entry comment above
     # sft gemma4-31b REMOVED 2026-04-18: see xlam entry comment above
     "sft_distillation_carnice-9b_unsloth|smoke-unsloth-sft-carnice-9b|40G|0-01:30:00"
+    # Qwen3.5-{4,9}B VLM-arch loaded text-only via FastLanguageModel
+    # (Jackrong recipe: r=64, alpha=64, +out_proj target). Smoke validates
+    # VLM-as-LLM load path on our 3g.40gb MIG before full training commit.
+    "xlam_function_calling_qwen3.5-4b_unsloth|smoke-unsloth-xlam-qwen35-4b|32G|0-01:00:00"
+    "xlam_function_calling_qwen3.5-9b_unsloth|smoke-unsloth-xlam-qwen35-9b|40G|0-01:30:00"
+    "sft_distillation_qwen3.5-4b_unsloth|smoke-unsloth-sft-qwen35-4b|32G|0-01:00:00"
+    "sft_distillation_qwen3.5-9b_unsloth|smoke-unsloth-sft-qwen35-9b|40G|0-01:30:00"
 )
 
 echo "=== UNSLOTH NOTEBOOK SMOKE TESTS ==="

@@ -24,7 +24,7 @@ mkdir -p "$OUTPUT_DIR" logs
 NOTEBOOKS=(
     "xlam_function_calling_qwen3.5-0.8b_unsloth|unsloth-xlam-qwen35-08b|32G|gpubase_bygpu_b2|0-12:00:00"
     "xlam_function_calling_qwen3.5-2b_unsloth|unsloth-xlam-qwen35-2b|32G|gpubase_bygpu_b2|0-12:00:00"
-    "xlam_function_calling_qwen3-4b_unsloth|unsloth-xlam-qwen3-4b|32G|gpubase_bygpu_b2|0-16:00:00"
+    "xlam_function_calling_qwen3-4b_unsloth|unsloth-xlam-qwen3-4b|32G|gpubase_bygpu_b3|0-16:00:00"
     "xlam_function_calling_qwen3-8b_unsloth|unsloth-xlam-qwen3-8b|40G|gpubase_bygpu_b5|1-08:00:00"
     "xlam_function_calling_lfm2.5-1.2b_unsloth|unsloth-xlam-lfm25-12b|32G|gpubase_bygpu_b2|0-03:00:00"
     "xlam_function_calling_lfm2.5-350m_unsloth|unsloth-xlam-lfm25-350m|32G|gpubase_bygpu_b2|0-02:30:00"
@@ -40,6 +40,14 @@ NOTEBOOKS=(
     "sft_distillation_gemma4_unsloth|unsloth-sft-gemma4|32G|gpubase_bygpu_b2|0-02:00:00"
     # Carnice-9B SFT: 1200 steps × 11 s/step × 1.3 + 45min overhead = 5h45m → 6h safety margin
     "sft_distillation_carnice-9b_unsloth|unsloth-sft-carnice-9b|40G|gpubase_bygpu_b2|0-06:00:00"
+    # Qwen3.5-{4,9}B — Jackrong recipe (r=64, alpha=64, +out_proj), VLM-arch
+    # loaded text-only via FastLanguageModel. Walltime caps: b2=12h, b3=24h, b4=72h.
+    # Qwen3.5-9B ≈ Carnice-9B (same 9B GQA class): ~11 s/step × 7500 × 1.3 + overhead = 32h → b4.
+    # Qwen3.5-4B: ~4 s/step × 7500 × 1.3 + overhead = ~13h → b3 (avoid the b2 cap bug).
+    "xlam_function_calling_qwen3.5-4b_unsloth|unsloth-xlam-qwen35-4b|32G|gpubase_bygpu_b3|0-16:00:00"
+    "xlam_function_calling_qwen3.5-9b_unsloth|unsloth-xlam-qwen35-9b|40G|gpubase_bygpu_b4|1-12:00:00"
+    "sft_distillation_qwen3.5-4b_unsloth|unsloth-sft-qwen35-4b|32G|gpubase_bygpu_b2|0-04:00:00"
+    "sft_distillation_qwen3.5-9b_unsloth|unsloth-sft-qwen35-9b|40G|gpubase_bygpu_b2|0-10:00:00"
 )
 
 echo "=== UNSLOTH NOTEBOOK FULL TRAINING ==="
