@@ -29,17 +29,24 @@ DATASETS = REG["datasets"]
 MEM = {"3b": 40, "4b": 40, "8b": 48, "9b": 48}
 CPUS = {"3b": 8, "4b": 8, "8b": 8, "9b": 8}
 # train walltime (H) by (size_tag, dataset). D is ~90x B → much longer.
-# Pilot (45918017, vibethinker-3b on D): 37 steps/min → 2 epochs over 377K ≈ 42h.
-# So D needs 48h (bigger models are slower/step → 48h uniform with margin). The 12h
-# b2 tier can't hold this — D-trains move to gpubase_bygpu_b4 (3-day MIG cap) below.
+# Pilot (45929015, vibethinker-3b on D): stable 36 steps/min → 2 epochs over 377K
+# ≈ 43h, fits b4/48h with ~5h margin. But 4B+ models are slower/step → projected to
+# exceed 48h. So: 3B stays on b4/48h; 4B/8B/9B move to b5/72h (7-day MIG tier).
+# resume_from_checkpoint covers any overrun regardless.
 TRAIN_H = {
     ("3b", "b"): 2, ("4b", "b"): 2, ("8b", "b"): 3, ("9b", "b"): 3,
-    ("3b", "d"): 48, ("4b", "d"): 48, ("8b", "d"): 48, ("9b", "d"): 48,
+    ("3b", "d"): 48, ("4b", "d"): 72, ("8b", "d"): 72, ("9b", "d"): 72,
 }
 SMOKE_H = 2  # generous; smoke is 100 rows / 5 steps
-# Train partition by dataset: B fits the 12h b2 tier; D needs the 3-day b4 tier
-# (same nvidia_h100_80gb_hbm3_3g.40gb MIG slice, just a longer-walltime partition).
-TRAIN_PARTITION = {"b": "gpubase_bygpu_b2", "d": "gpubase_bygpu_b4"}
+
+
+def train_partition(size_tag: str, ds_key: str) -> str:
+    # B fits the 12h b2 tier. On D: 3B fits b4 (3-day); 4B+ need b5 (7-day) headroom.
+    # Same nvidia_h100_80gb_hbm3_3g.40gb MIG slice throughout — only the walltime tier
+    # differs.
+    if ds_key == "b":
+        return "gpubase_bygpu_b2"
+    return "gpubase_bygpu_b4" if size_tag == "3b" else "gpubase_bygpu_b5"
 
 
 def hhmm(h: int) -> str:
@@ -135,7 +142,7 @@ def train_wrapper(m: dict, ds_key: str) -> str:
     out_pref = f"fable_{m['dir']}_{ds_key}"
     size = m["size_tag"]
     wall = hhmm(TRAIN_H[(size, ds_key)])
-    partition = TRAIN_PARTITION[ds_key]
+    partition = train_partition(size, ds_key)
     return f'''#!/bin/bash
 #SBATCH --job-name={job}
 #SBATCH --account=def-maxwl_gpu
