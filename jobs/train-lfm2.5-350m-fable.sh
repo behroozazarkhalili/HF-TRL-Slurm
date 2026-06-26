@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=train-lfm2.5-350m-fable
 #SBATCH --account=def-maxwl_gpu
-#SBATCH --time=0-12:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=40G
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
-#SBATCH --partition=gpubase_bygpu_b2
+#SBATCH --partition=gpubase_bygpu_b4
 #SBATCH --exclude=fc10713
 #SBATCH --output=/project/6014832/ermia/HF-TRL/logs/%x-%j.out
 #SBATCH --error=/project/6014832/ermia/HF-TRL/logs/%x-%j.err

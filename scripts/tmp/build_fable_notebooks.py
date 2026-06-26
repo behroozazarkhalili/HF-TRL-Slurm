@@ -341,7 +341,20 @@ def build_one(m: dict, ds_key: str) -> tuple[str, dict]:
     if var != "trainer":
         block = f"trainer = {var}  # alias for masking helper\n" + block + f"\n{var} = trainer"
     tlines[train_i:train_i] = ["", *block.split("\n"), ""]
-    nb["cells"][ti]["source"] = as_lines("\n".join(tlines))
+    # Requeue-safety: make `<var>.train()` resume from the last checkpoint in
+    # output_dir if one exists (auto-detected). A long D-run that hits walltime or
+    # a node failure then continues instead of restarting from scratch. No-op on a
+    # fresh run (no checkpoint → trains from step 0).
+    joined = "\n".join(tlines)
+    joined = re.sub(
+        rf"(\b{re.escape(var)}\.train\()\s*\)",
+        r"\1resume_from_checkpoint=(_os.path.isdir(CHECKPOINT_ROOT) and any("
+        r"d.startswith('checkpoint-') for d in _os.listdir(CHECKPOINT_ROOT))))",
+        joined, count=1,
+    )
+    if "resume_from_checkpoint" in joined and "import os as _os" not in joined.split("resume_from_checkpoint")[0][-400:]:
+        joined = "import os as _os\n" + joined
+    nb["cells"][ti]["source"] = as_lines(joined)
 
     # Localize the save-cell scratch-dir literals to a UNIQUE per-(model,dataset)
     # prefix. The templates carry stale, COLLIDING names (every Qwen3.5 variant
