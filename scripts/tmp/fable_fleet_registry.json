@@ -1,0 +1,36 @@
+{
+  "_doc": "Authoritative fable-fleet registry — single source of truth for build_fable_notebooks.py + build_fable_wrappers.py. Seeded from the Hub ground-truth set of 16 models actually trained on the claude reasoning-distillation dataset (ermiaazarkhalili/*-SFT-Claude-Opus-Reasoning-*, non-GGUF). Each model is fanned over 2 fable datasets (D, B) = 32 runs. base/family/loader verified 2026-06-26 (probe job 45912985 + notebook MODEL_NAME extraction).",
+  "datasets": {
+    "d": {"repo": "ermiaazarkhalili/Fable-5-Complete-2M-Clean", "rows": 397683, "suffix": "Fable5",       "name_tag": "fable",       "epochs": 2, "long_run": true},
+    "b": {"repo": "ermiaazarkhalili/Fable-5-Glint-Clean",       "rows": 4350,   "suffix": "Fable5-Glint", "name_tag": "fable-glint", "epochs": 3, "long_run": false}
+  },
+  "recipe": {
+    "_ref": "LoRA sweet-spot (docs/recipes/fable-mythos-distillation.md §3.1); Qwable-9B reference = full-FT LR1e-5 cosine 3%warmup 2ep eff-batch16 assistant-only chunked-NLL, every answer begins <think>, 100-ex held-out (80% fable / 20% terminal) → val loss 0.71 / tok-acc 0.791.",
+    "lora_r": 16, "lora_alpha": 16, "learning_rate": 2e-4, "max_seq_length": 4096,
+    "load_in_4bit": true, "assistant_only_masking": true, "warmup_ratio": 0.03, "lr_scheduler": "cosine"
+  },
+  "families": {
+    "qwen35": {"loader": "FastLanguageModel", "vl_unwrap": true,  "chat": "builtin",  "lora_targets": ["q_proj","k_proj","v_proj","o_proj","gate_proj","up_proj","down_proj"]},
+    "dense":  {"loader": "FastLanguageModel", "vl_unwrap": false, "chat": "builtin",  "lora_targets": ["q_proj","k_proj","v_proj","o_proj","gate_proj","up_proj","down_proj"]},
+    "lfm2":   {"loader": "FastLanguageModel", "vl_unwrap": false, "chat": "builtin",  "lora_targets": ["q_proj","k_proj","v_proj","o_proj","gate_proj","up_proj","down_proj"]},
+    "gemma":  {"loader": "FastModel",         "vl_unwrap": true,  "chat": "gemma-4",  "lora_targets": null}
+  },
+  "models": [
+    {"name": "Carnice-9B",         "base": "kai-os/Carnice-9b",                "family": "dense",  "nickname": "carnice-9b",        "dir": "carnice_9b",        "size_tag": "9b", "template": "sft_distillation_carnice-9b_unsloth.ipynb"},
+    {"name": "FastContext-4B-RL",  "base": "microsoft/FastContext-1.0-4B-RL",  "family": "dense",  "nickname": "fastcontext-4b-rl", "dir": "fastcontext_4b_rl", "size_tag": "4b", "template": "sft_distillation_fastcontext-4b-rl_unsloth.ipynb", "repo_stem": "FastContext-4B-RL_base"},
+    {"name": "FastContext-4B-SFT", "base": "microsoft/FastContext-1.0-4B-SFT", "family": "dense",  "nickname": "fastcontext-4b-sft","dir": "fastcontext_4b_sft","size_tag": "4b", "template": "sft_distillation_fastcontext-4b-sft_unsloth.ipynb", "repo_stem": "FastContext-4B-SFT_base"},
+    {"name": "Gemma4-E2B",         "base": "unsloth/gemma-4-E2B-it",           "family": "gemma",  "nickname": "gemma4-e2b",        "dir": "gemma4_e2b",        "size_tag": "4b", "template": "sft_distillation_gemma4-e4b_unsloth.ipynb"},
+    {"name": "Gemma4-E4B",         "base": "unsloth/gemma-4-E4B-it",           "family": "gemma",  "nickname": "gemma4-e4b",        "dir": "gemma4_e4b",        "size_tag": "4b", "template": "sft_distillation_gemma4-e4b_unsloth.ipynb"},
+    {"name": "Granite-4.1-3B",     "base": "ibm-granite/granite-4.1-3b",       "family": "dense",  "nickname": "granite41-3b",      "dir": "granite41_3b",      "size_tag": "3b", "template": "sft_distillation_granite4.1-3b_unsloth.ipynb"},
+    {"name": "Granite-4.1-8B",     "base": "ibm-granite/granite-4.1-8b",       "family": "dense",  "nickname": "granite41-8b",      "dir": "granite41_8b",      "size_tag": "8b", "template": "sft_distillation_granite4.1-8b_unsloth.ipynb"},
+    {"name": "LFM2.5-1.2B",        "base": "LiquidAI/LFM2.5-1.2B-Instruct",    "family": "lfm2",   "nickname": "lfm2.5-1.2b",       "dir": "lfm25_12b",         "size_tag": "3b", "template": "sft_distillation_lfm2.5_unsloth.ipynb"},
+    {"name": "LFM2.5-350M",        "base": "LiquidAI/LFM2.5-350M",             "family": "lfm2",   "nickname": "lfm2.5-350m",       "dir": "lfm25_350m",        "size_tag": "3b", "template": "sft_distillation_lfm2.5-350m_unsloth.ipynb"},
+    {"name": "Qwen3-4B",           "base": "unsloth/Qwen3-4B",                 "family": "dense",  "nickname": "qwen3-4b",          "dir": "qwen3_4b",          "size_tag": "4b", "template": "sft_distillation_qwen3-4b_unsloth.ipynb"},
+    {"name": "Qwen3-8B",           "base": "unsloth/Qwen3-8B",                 "family": "dense",  "nickname": "qwen3-8b",          "dir": "qwen3_8b",          "size_tag": "8b", "template": "sft_distillation_qwen3-8b_unsloth.ipynb"},
+    {"name": "Qwen3.5-0.8B",       "base": "unsloth/Qwen3.5-0.8B",             "family": "qwen35", "nickname": "qwen35-0.8b",       "dir": "qwen35_08b",        "size_tag": "3b", "template": "sft_distillation_qwen3.5-9b_unsloth.ipynb"},
+    {"name": "Qwen3.5-2B",         "base": "unsloth/Qwen3.5-2B",               "family": "qwen35", "nickname": "qwen35-2b",         "dir": "qwen35_2b",         "size_tag": "3b", "template": "sft_distillation_qwen3.5-9b_unsloth.ipynb"},
+    {"name": "Qwen3.5-4B",         "base": "unsloth/Qwen3.5-4B",               "family": "qwen35", "nickname": "qwen35-4b",         "dir": "qwen35_4b",         "size_tag": "4b", "template": "sft_distillation_qwen3.5-4b_unsloth.ipynb"},
+    {"name": "Qwen3.5-9B",         "base": "unsloth/Qwen3.5-9B",               "family": "qwen35", "nickname": "qwen35-9b",         "dir": "qwen35_9b",         "size_tag": "9b", "template": "sft_distillation_qwen3.5-9b_unsloth.ipynb"},
+    {"name": "VibeThinker-3B",     "base": "WeiboAI/VibeThinker-3B",           "family": "dense",  "nickname": "vibethinker-3b",    "dir": "vibethinker_3b",    "size_tag": "3b", "template": "sft_distillation_vibethinker-3b_unsloth.ipynb"}
+  ]
+}
