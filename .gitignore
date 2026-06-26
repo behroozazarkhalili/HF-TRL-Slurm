@@ -63,3 +63,6 @@ notebooks/unsloth_compiled_cache/
 # Claude Code session-local state
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
+
+# editor backups of notebooks
+*.ipynb.bak

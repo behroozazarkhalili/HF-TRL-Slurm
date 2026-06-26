@@ -22,7 +22,7 @@ set -euo pipefail
 
 PROJECT_DIR="/project/6014832/ermia/HF-TRL"
 SINGLE_MODEL_WRAPPER="$PROJECT_DIR/jobs/gguf-single-model.sh"
-VENV="/scratch/ermia/venvs/hf_env"
+VENV="/scratch/ermia/venvs/hf_unsloth"
 EXTRA_QUANTS="${EXTRA_QUANTS:-Q2_K,Q3_K_M,Q4_K_M,Q5_K_M,Q6_K,Q8_0}"
 FILTER="${FILTER:-}"
 
@@ -53,6 +53,22 @@ MODELS=(
     "ermiaazarkhalili/Qwen3.5-9B-Function-Calling-xLAM-Unsloth|unsloth/Qwen3.5-9B|full|SFT|xLAM-60K|apache-2.0|qwen35-9b-xlam-unsloth|ermiaazarkhalili/Qwen3.5-9B-Function-Calling-xLAM-Unsloth-GGUF"
     "ermiaazarkhalili/Qwen3.5-4B-SFT-Claude-Opus-Reasoning-Unsloth|unsloth/Qwen3.5-4B|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|qwen35-4b-sft-claude-unsloth|ermiaazarkhalili/Qwen3.5-4B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
     "ermiaazarkhalili/Qwen3.5-9B-SFT-Claude-Opus-Reasoning-Unsloth|unsloth/Qwen3.5-9B|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|qwen35-9b-sft-claude-unsloth|ermiaazarkhalili/Qwen3.5-9B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
+
+    # ── Granite 4.1 series (IBM dense decoder) ──
+    "ermiaazarkhalili/Granite-4.1-3B-SFT-Claude-Opus-Reasoning-Unsloth|ibm-granite/granite-4.1-3b|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|granite41-3b-sft-claude-unsloth|ermiaazarkhalili/Granite-4.1-3B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
+    "ermiaazarkhalili/Granite-4.1-8B-SFT-Claude-Opus-Reasoning-Unsloth|ibm-granite/granite-4.1-8b|full|SFT-Distillation|Claude-Opus-Reasoning|apache-2.0|granite41-8b-sft-claude-unsloth|ermiaazarkhalili/Granite-4.1-8B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
+    "ermiaazarkhalili/Granite-4.1-3B-Function-Calling-xLAM-Unsloth|ibm-granite/granite-4.1-3b|full|SFT|xLAM-60K|apache-2.0|granite41-3b-xlam-unsloth|ermiaazarkhalili/Granite-4.1-3B-Function-Calling-xLAM-Unsloth-GGUF"
+    "ermiaazarkhalili/Granite-4.1-8B-Function-Calling-xLAM-Unsloth|ibm-granite/granite-4.1-8b|full|SFT|xLAM-60K|apache-2.0|granite41-8b-xlam-unsloth|ermiaazarkhalili/Granite-4.1-8B-Function-Calling-xLAM-Unsloth-GGUF"
+
+    # ── VibeThinker-3B (WeiboAI, Qwen2 reasoning) ──
+    "ermiaazarkhalili/VibeThinker-3B-SFT-Claude-Opus-Reasoning-Unsloth|WeiboAI/VibeThinker-3B|full|SFT-Distillation|Claude-Opus-Reasoning|mit|vibethinker-3b-sft-claude-unsloth|ermiaazarkhalili/VibeThinker-3B-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
+    "ermiaazarkhalili/VibeThinker-3B-Function-Calling-xLAM-Unsloth|WeiboAI/VibeThinker-3B|full|SFT|xLAM-60K|mit|vibethinker-3b-xlam-unsloth|ermiaazarkhalili/VibeThinker-3B-Function-Calling-xLAM-Unsloth-GGUF"
+
+    # ── FastContext-4B (Microsoft, Qwen3; SFT_base + RL_base variants) ──
+    "ermiaazarkhalili/FastContext-4B-SFT_base-SFT-Claude-Opus-Reasoning-Unsloth|microsoft/FastContext-1.0-4B-SFT|full|SFT-Distillation|Claude-Opus-Reasoning|mit|fastcontext-4b-sftbase-sft-claude-unsloth|ermiaazarkhalili/FastContext-4B-SFT_base-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
+    "ermiaazarkhalili/FastContext-4B-SFT_base-Function-Calling-xLAM-Unsloth|microsoft/FastContext-1.0-4B-SFT|full|SFT|xLAM-60K|mit|fastcontext-4b-sftbase-xlam-unsloth|ermiaazarkhalili/FastContext-4B-SFT_base-Function-Calling-xLAM-Unsloth-GGUF"
+    "ermiaazarkhalili/FastContext-4B-RL_base-SFT-Claude-Opus-Reasoning-Unsloth|microsoft/FastContext-1.0-4B-RL|full|SFT-Distillation|Claude-Opus-Reasoning|mit|fastcontext-4b-rlbase-sft-claude-unsloth|ermiaazarkhalili/FastContext-4B-RL_base-SFT-Claude-Opus-Reasoning-Unsloth-GGUF"
+    "ermiaazarkhalili/FastContext-4B-RL_base-Function-Calling-xLAM-Unsloth|microsoft/FastContext-1.0-4B-RL|full|SFT|xLAM-60K|mit|fastcontext-4b-rlbase-xlam-unsloth|ermiaazarkhalili/FastContext-4B-RL_base-Function-Calling-xLAM-Unsloth-GGUF"
 )
 
 if [[ ! -x "$SINGLE_MODEL_WRAPPER" ]]; then
@@ -103,9 +119,14 @@ except Exception:
         continue
     fi
 
+    # Export QUANTS in the shell environment rather than on the sbatch command
+    # line — SLURM's --export= uses commas as separators and would truncate the
+    # comma-separated quant list to only the first quant.
+    export HUB_ID BASE_MODEL OUTPUT_REPO
+    export QUANTS="$EXTRA_QUANTS"
     JOB_ID=$(sbatch --parsable \
         --job-name="gguf-$SHORT_NAME" \
-        --export=ALL,HUB_ID="$HUB_ID",BASE_MODEL="$BASE_MODEL",OUTPUT_REPO="$OUTPUT_REPO",QUANTS="$EXTRA_QUANTS" \
+        --export=ALL \
         "$SINGLE_MODEL_WRAPPER" 2>&1 | tail -n1)
 
     if [[ "$JOB_ID" =~ ^[0-9]+$ ]]; then

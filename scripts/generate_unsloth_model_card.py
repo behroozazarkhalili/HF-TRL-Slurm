@@ -69,6 +69,19 @@ MODELS = {
         "model_family": "gemma4",
         "unsloth_class": "FastModel",
         "chat_template": "gemma-4",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "45310123",
+            "runtime_sec": 2808,
+            "train_loss": 1.6992,
+            "peak_vram_gb": 34.06,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
     },
     # xLAM Function Calling
     "ermiaazarkhalili/Qwen3.5-0.8B-Function-Calling-xLAM-Unsloth": {
@@ -141,7 +154,487 @@ MODELS = {
         "unsloth_class": "FastModel",
         "chat_template": "gemma-4",
     },
+    # Qwen3 (non-3.5) + LFM2.5-350M — 2026-04-24 completed batch
+    "ermiaazarkhalili/LFM2.5-350M-Function-Calling-xLAM-Unsloth": {
+        "display_name": "LFM2.5-350M-Function-Calling-xLAM-Unsloth",
+        "base_model": "LiquidAI/LFM2.5-350M",
+        "base_model_name": "LFM2.5-350M",
+        "params": "350M",
+        "task": "xlam_function_calling",
+        "dataset": "Salesforce/xlam-function-calling-60k",
+        "dataset_name": "xLAM Function Calling 60K",
+        "dataset_samples": "60,000",
+        "license": "apache-2.0",
+        "model_family": "lfm2.5",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "LFM2.5 (chatml)",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "36550863",
+            "runtime_sec": 2613,
+            "train_loss": 0.6507,
+            "peak_vram_gb": 5.73,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/Qwen3-4B-Function-Calling-xLAM-Unsloth": {
+        "display_name": "Qwen3-4B-Function-Calling-xLAM-Unsloth",
+        "base_model": "unsloth/qwen3-4b-unsloth-bnb-4bit",
+        "base_model_name": "Qwen3-4B (Unsloth 4-bit)",
+        "params": "4B",
+        "task": "xlam_function_calling",
+        "dataset": "Salesforce/xlam-function-calling-60k",
+        "dataset_name": "xLAM Function Calling 60K",
+        "dataset_samples": "60,000",
+        "license": "apache-2.0",
+        "model_family": "qwen3",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in Qwen3",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "36885894",
+            "runtime_sec": 7196,
+            "train_loss": 0.2309,
+            "peak_vram_gb": 15.21,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/Qwen3-4B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "Qwen3-4B-SFT-Claude-Opus-Reasoning-Unsloth",
+        "base_model": "unsloth/qwen3-4b-unsloth-bnb-4bit",
+        "base_model_name": "Qwen3-4B (Unsloth 4-bit)",
+        "params": "4B",
+        "task": "sft_distillation",
+        "dataset": "ermiaazarkhalili/claude-reasoning-distillation",
+        "dataset_name": "Claude Reasoning Distillation",
+        "dataset_samples": "10,477",
+        "license": "apache-2.0",
+        "model_family": "qwen3",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in Qwen3",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "36885896",
+            "runtime_sec": 1263,
+            "train_loss": 0.9980,
+            "peak_vram_gb": 14.01,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/Qwen3.5-4B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "Qwen3.5-4B-SFT-Claude-Opus-Reasoning-Unsloth",
+        "base_model": "unsloth/Qwen3.5-4B",
+        "base_model_name": "Qwen3.5-4B",
+        "params": "4B",
+        "task": "sft_distillation",
+        "dataset": "ermiaazarkhalili/claude-reasoning-distillation",
+        "dataset_name": "Claude Reasoning Distillation",
+        "dataset_samples": "10,477",
+        "license": "apache-2.0",
+        "model_family": "qwen3.5",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in Qwen3.5",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 64,
+        "lora_alpha": 64,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "37204026",
+            "runtime_sec": 5435,
+            "train_loss": 0.918,
+            "peak_vram_gb": 26.64,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/Qwen3.5-9B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "Qwen3.5-9B-SFT-Claude-Opus-Reasoning-Unsloth",
+        "base_model": "unsloth/Qwen3.5-9B",
+        "base_model_name": "Qwen3.5-9B",
+        "params": "9B",
+        "task": "sft_distillation",
+        "dataset": "ermiaazarkhalili/claude-reasoning-distillation",
+        "dataset_name": "Claude Reasoning Distillation",
+        "dataset_samples": "10,477",
+        "license": "apache-2.0",
+        "model_family": "qwen3.5",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in Qwen3.5",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 64,
+        "lora_alpha": 64,
+        "batch_size": 1,
+        "grad_accum": 8,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "37216727",
+            "runtime_sec": 9113,
+            "train_loss": 0.795,
+            "peak_vram_gb": 20.25,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/Qwen3-8B-Function-Calling-xLAM-Unsloth": {
+        "display_name": "Qwen3-8B-Function-Calling-xLAM-Unsloth",
+        "base_model": "unsloth/qwen3-8b-unsloth-bnb-4bit",
+        "base_model_name": "Qwen3-8B (Unsloth 4-bit)",
+        "params": "8B",
+        "task": "xlam_function_calling",
+        "dataset": "Salesforce/xlam-function-calling-60k",
+        "dataset_name": "xLAM Function Calling 60K",
+        "dataset_samples": "60,000",
+        "license": "apache-2.0",
+        "model_family": "qwen3",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in Qwen3",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 1,
+        "grad_accum": 8,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "36885898",
+            "runtime_sec": 13716,
+            "train_loss": 0.2186,
+            "peak_vram_gb": 17.07,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/Qwen3-8B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "Qwen3-8B-SFT-Claude-Opus-Reasoning-Unsloth",
+        "base_model": "unsloth/qwen3-8b-unsloth-bnb-4bit",
+        "base_model_name": "Qwen3-8B (Unsloth 4-bit)",
+        "params": "8B",
+        "task": "sft_distillation",
+        "dataset": "ermiaazarkhalili/claude-reasoning-distillation",
+        "dataset_name": "Claude Reasoning Distillation",
+        "dataset_samples": "10,477",
+        "license": "apache-2.0",
+        "model_family": "qwen3",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in Qwen3",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 1,
+        "grad_accum": 8,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "36885901",
+            "runtime_sec": 2430,
+            "train_loss": 0.8753,
+            "peak_vram_gb": 14.23,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/Granite-4.1-3B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "Granite-4.1-3B-SFT-Claude-Opus-Reasoning-Unsloth",
+        "base_model": "ibm-granite/granite-4.1-3b",
+        "base_model_name": "Granite 4.1-3B",
+        "params": "3B",
+        "task": "sft_distillation",
+        "dataset": "ermiaazarkhalili/claude-reasoning-distillation",
+        "dataset_name": "Claude Reasoning Distillation",
+        "dataset_samples": "10,477",
+        "license": "apache-2.0",
+        "model_family": "granite",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in Granite 4.1",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "38330896",
+            "runtime_sec": 1767,
+            "train_loss": 0.8932,
+            "peak_vram_gb": 10.18,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/Granite-4.1-8B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "Granite-4.1-8B-SFT-Claude-Opus-Reasoning-Unsloth",
+        "base_model": "ibm-granite/granite-4.1-8b",
+        "base_model_name": "Granite 4.1-8B",
+        "params": "8B",
+        "task": "sft_distillation",
+        "dataset": "ermiaazarkhalili/claude-reasoning-distillation",
+        "dataset_name": "Claude Reasoning Distillation",
+        "dataset_samples": "10,477",
+        "license": "apache-2.0",
+        "model_family": "granite",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in Granite 4.1",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "38330897",
+            "runtime_sec": 1969,
+            "train_loss": 0.7895,
+            "peak_vram_gb": 9.26,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/Granite-4.1-3B-Function-Calling-xLAM-Unsloth": {
+        "display_name": "Granite-4.1-3B-Function-Calling-xLAM-Unsloth",
+        "base_model": "ibm-granite/granite-4.1-3b",
+        "base_model_name": "Granite 4.1-3B",
+        "params": "3B",
+        "task": "xlam_function_calling",
+        "dataset": "Salesforce/xlam-function-calling-60k",
+        "dataset_name": "xLAM Function Calling 60K",
+        "dataset_samples": "60,000",
+        "license": "apache-2.0",
+        "model_family": "granite",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in Granite 4.1",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "38330898",
+            "runtime_sec": 10049,
+            "train_loss": 0.2242,
+            "peak_vram_gb": 10.09,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/Granite-4.1-8B-Function-Calling-xLAM-Unsloth": {
+        "display_name": "Granite-4.1-8B-Function-Calling-xLAM-Unsloth",
+        "base_model": "ibm-granite/granite-4.1-8b",
+        "base_model_name": "Granite 4.1-8B",
+        "params": "8B",
+        "task": "xlam_function_calling",
+        "dataset": "Salesforce/xlam-function-calling-60k",
+        "dataset_name": "xLAM Function Calling 60K",
+        "dataset_samples": "60,000",
+        "license": "apache-2.0",
+        "model_family": "granite",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in Granite 4.1",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "38330899",
+            "runtime_sec": 10937,
+            "train_loss": 0.2092,
+            "peak_vram_gb": 8.4,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/VibeThinker-3B-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "VibeThinker-3B-SFT-Claude-Opus-Reasoning-Unsloth",
+        "base_model": "WeiboAI/VibeThinker-3B",
+        "base_model_name": "VibeThinker-3B",
+        "params": "3B",
+        "task": "sft_distillation",
+        "dataset": "ermiaazarkhalili/claude-reasoning-distillation",
+        "dataset_name": "Claude Reasoning Distillation",
+        "dataset_samples": "10,477",
+        "license": "mit",
+        "model_family": "qwen2",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in VibeThinker (Qwen2)",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "45169145",
+            "runtime_sec": 1429,
+            "train_loss": 1.367,
+            "peak_vram_gb": 12.66,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/VibeThinker-3B-Function-Calling-xLAM-Unsloth": {
+        "display_name": "VibeThinker-3B-Function-Calling-xLAM-Unsloth",
+        "base_model": "WeiboAI/VibeThinker-3B",
+        "base_model_name": "VibeThinker-3B",
+        "params": "3B",
+        "task": "xlam_function_calling",
+        "dataset": "Salesforce/xlam-function-calling-60k",
+        "dataset_name": "xLAM Function Calling 60K",
+        "dataset_samples": "60,000",
+        "license": "mit",
+        "model_family": "qwen2",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in VibeThinker (Qwen2)",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "45169146",
+            "runtime_sec": 8435,
+            "train_loss": 0.309,
+            "peak_vram_gb": 13.93,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/FastContext-4B-SFT_base-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "FastContext-4B-SFT_base-SFT-Claude-Opus-Reasoning-Unsloth",
+        "base_model": "microsoft/FastContext-1.0-4B-SFT",
+        "base_model_name": "FastContext-1.0-4B-SFT",
+        "params": "4B",
+        "task": "sft_distillation",
+        "dataset": "ermiaazarkhalili/claude-reasoning-distillation",
+        "dataset_name": "Claude Reasoning Distillation",
+        "dataset_samples": "10,477",
+        "license": "mit",
+        "model_family": "qwen3",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in FastContext (Qwen3)",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "45169147",
+            "runtime_sec": 1291,
+            "train_loss": 0.8678,
+            "peak_vram_gb": 13.3,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/FastContext-4B-SFT_base-Function-Calling-xLAM-Unsloth": {
+        "display_name": "FastContext-4B-SFT_base-Function-Calling-xLAM-Unsloth",
+        "base_model": "microsoft/FastContext-1.0-4B-SFT",
+        "base_model_name": "FastContext-1.0-4B-SFT",
+        "params": "4B",
+        "task": "xlam_function_calling",
+        "dataset": "Salesforce/xlam-function-calling-60k",
+        "dataset_name": "xLAM Function Calling 60K",
+        "dataset_samples": "60,000",
+        "license": "mit",
+        "model_family": "qwen3",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in FastContext (Qwen3)",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "45169148",
+            "runtime_sec": 7375,
+            "train_loss": 0.2301,
+            "peak_vram_gb": 14.52,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/FastContext-4B-RL_base-SFT-Claude-Opus-Reasoning-Unsloth": {
+        "display_name": "FastContext-4B-RL_base-SFT-Claude-Opus-Reasoning-Unsloth",
+        "base_model": "microsoft/FastContext-1.0-4B-RL",
+        "base_model_name": "FastContext-1.0-4B-RL",
+        "params": "4B",
+        "task": "sft_distillation",
+        "dataset": "ermiaazarkhalili/claude-reasoning-distillation",
+        "dataset_name": "Claude Reasoning Distillation",
+        "dataset_samples": "10,477",
+        "license": "mit",
+        "model_family": "qwen3",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in FastContext (Qwen3)",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "45169149",
+            "runtime_sec": 1345,
+            "train_loss": 0.8673,
+            "peak_vram_gb": 13.3,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
+    "ermiaazarkhalili/FastContext-4B-RL_base-Function-Calling-xLAM-Unsloth": {
+        "display_name": "FastContext-4B-RL_base-Function-Calling-xLAM-Unsloth",
+        "base_model": "microsoft/FastContext-1.0-4B-RL",
+        "base_model_name": "FastContext-1.0-4B-RL",
+        "params": "4B",
+        "task": "xlam_function_calling",
+        "dataset": "Salesforce/xlam-function-calling-60k",
+        "dataset_name": "xLAM Function Calling 60K",
+        "dataset_samples": "60,000",
+        "license": "mit",
+        "model_family": "qwen3",
+        "unsloth_class": "FastLanguageModel",
+        "chat_template": "built-in FastContext (Qwen3)",
+        "max_steps_note": "1 epoch (full dataset)",
+        "lora_r": 16,
+        "lora_alpha": 16,
+        "batch_size": 2,
+        "grad_accum": 4,
+        "learning_rate": "2e-4",
+        "training_outcome": {
+            "job_id": "45169150",
+            "runtime_sec": 7751,
+            "train_loss": 0.2303,
+            "peak_vram_gb": 14.52,
+            "gpu": "H100 80GB HBM3 (MIG 3g.40gb)",
+        },
+    },
 }
+
+
+def _render_training_outcome(outcome: dict | None) -> str:
+    """Render the Training Outcome section, or empty string if outcome is None."""
+    if not outcome:
+        return ""
+    runtime_s = outcome.get("runtime_sec", 0)
+    h, rem = divmod(runtime_s, 3600)
+    mi, s = divmod(rem, 60)
+    runtime_hms = f"{h:d}h {mi:02d}m {s:02d}s" if h else f"{mi:d}m {s:02d}s"
+    return (
+        "\n### Training Outcome\n\n"
+        "| Metric | Value |\n"
+        "|--------|-------|\n"
+        f"| SLURM Job ID | `{outcome.get('job_id', 'N/A')}` |\n"
+        f"| Runtime | {runtime_hms} ({runtime_s}s) |\n"
+        f"| Final Training Loss | {outcome.get('train_loss', 'N/A')} |\n"
+        f"| Peak VRAM | {outcome.get('peak_vram_gb', 'N/A')} GB |\n"
+        f"| GPU | {outcome.get('gpu', 'N/A')} |\n"
+    )
 
 
 def generate_card(repo_id: str, m: dict) -> str:
@@ -164,6 +657,15 @@ def generate_card(repo_id: str, m: dict) -> str:
     )
 
     gguf_repo = f"{repo_id}-GGUF"
+
+    # ── Hyperparameters (registry-provided, fall back to legacy defaults) ──
+    lora_r = m.get("lora_r", 16)
+    lora_alpha = m.get("lora_alpha", 16)
+    batch_size = m.get("batch_size", 2)
+    grad_accum = m.get("grad_accum", 4)
+    effective_batch = batch_size * grad_accum
+    learning_rate = m.get("learning_rate", "2e-4")
+    max_steps_note = m.get("max_steps_note", "1,000")
 
     card = f"""---
 license: {m['license']}
@@ -218,11 +720,11 @@ Trained on {dataset_desc}.
 |-----------|-------|
 | Unsloth Class | `{m['unsloth_class']}` |
 | Chat Template | {m['chat_template']} |
-| Learning Rate | 2e-4 |
-| Batch Size | 2 per device |
-| Gradient Accumulation | 4 steps |
-| Effective Batch Size | 8 |
-| Max Steps | 1,000 |
+| Learning Rate | {learning_rate} |
+| Batch Size | {batch_size} per device |
+| Gradient Accumulation | {grad_accum} steps |
+| Effective Batch Size | {effective_batch} |
+| Max Steps | {max_steps_note} |
 | Optimizer | AdamW 8-bit |
 | LR Scheduler | Linear |
 | Warmup Steps | 5 |
@@ -234,8 +736,8 @@ Trained on {dataset_desc}.
 
 | Parameter | Value |
 |-----------|-------|
-| LoRA Rank (r) | 16 |
-| LoRA Alpha | 16 |
+| LoRA Rank (r) | {lora_r} |
+| LoRA Alpha | {lora_alpha} |
 | LoRA Dropout | 0 |
 | Quantization | 4-bit QLoRA |
 | Target Modules | {"attention + MLP (via FastModel)" if m['model_family'] == 'gemma4' else "q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj"} |
@@ -255,7 +757,7 @@ Trained on {dataset_desc}.
 | GPU | NVIDIA H100 80GB HBM3 (MIG 3g.40gb slice) |
 | Cluster | DRAC Fir (Compute Canada) |
 | Execution | [Papermill](https://github.com/nteract/papermill) on SLURM |
-
+{_render_training_outcome(m.get("training_outcome"))}
 ## Usage
 
 ### Quick Start (Transformers)

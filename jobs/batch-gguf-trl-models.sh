@@ -23,7 +23,7 @@
 #SBATCH --mail-type=BEGIN,END,FAIL
 
 module load gcc arrow python/3.11.5
-source /scratch/ermia/venvs/hf_env/bin/activate
+source /scratch/ermia/venvs/hf_unsloth/bin/activate
 
 export SCRATCH=${SCRATCH:-/scratch/$USER}
 export HF_HOME=$SCRATCH/.cache/huggingface

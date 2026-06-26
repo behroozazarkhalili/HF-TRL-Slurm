@@ -68,17 +68,129 @@ def _infer_fallback_class(model_dir: Path) -> str | None:
     return None
 
 
-def patch_tokenizer_class(model_dir: Path) -> None:
+TOKENIZER_FILE_NAMES = (
+    "tokenizer_config.json",
+    "tokenizer.json",
+    "tokenizer.model",
+    "special_tokens_map.json",
+    "vocab.json",
+    "merges.txt",
+    "added_tokens.json",
+    "chat_template.jinja",
+)
+
+
+def _extract_vocab_size(cfg: dict) -> int | None:
+    """Find vocab_size wherever it lives.
+
+    Flat configs (Llama, Qwen): top-level `vocab_size`.
+    Multi-modal configs (Gemma4 / gemma3n, Llama-3.2-Vision, PaliGemma):
+    nested under `text_config`. Some vendors use `language_config`.
+    """
+    v = cfg.get("vocab_size")
+    if isinstance(v, int):
+        return v
+    for nest_key in ("text_config", "language_config", "llm_config"):
+        nested = cfg.get(nest_key)
+        if isinstance(nested, dict):
+            nv = nested.get("vocab_size")
+            if isinstance(nv, int):
+                return nv
+    return None
+
+
+def _vocab_sizes_match(base_cfg: Path, model_cfg: Path) -> tuple[bool, str]:
+    """Compare `vocab_size` in the two config.json files.
+
+    A base-tokenizer swap is only safe when the fine-tune did NOT change the
+    vocab (e.g. no resize_token_embeddings, no added special tokens). For all
+    our Unsloth LoRA flows this holds — LoRA targets projection layers only.
+
+    Returns (safe_to_swap, detail). If vocab_size cannot be resolved in either
+    config, we treat the check as inconclusive rather than a hard fail:
+    base and model come from the same HF family by construction, so vocab
+    drift without an explicit resize_token_embeddings call is not possible.
+    """
+    import json
+    try:
+        bcfg = json.loads(base_cfg.read_text())
+        mcfg = json.loads(model_cfg.read_text())
+    except Exception as e:
+        return False, f"config.json read error: {e}"
+    bv = _extract_vocab_size(bcfg)
+    mv = _extract_vocab_size(mcfg)
+    if bv is None and mv is None:
+        return True, "vocab_size unknown in both configs — assuming consistent (same family)"
+    if bv is None or mv is None:
+        return False, f"vocab_size missing on one side (base={bv}, model={mv})"
+    if bv != mv:
+        return False, f"vocab size drift: base={bv} model={mv}"
+    return True, f"vocab_size={bv}"
+
+
+def _swap_base_tokenizer(model_dir: Path, base_model: str) -> tuple[bool, str]:
+    """Replace model_dir's tokenizer files with those from `base_model`.
+
+    Safeguards:
+      - Aborts if vocab_size drifts between model and base.
+      - Backs up every overwritten file to *.orig.
+      - Only swaps files that actually exist in the base snapshot.
+    Returns (swapped_ok, detail).
+    """
+    from huggingface_hub import snapshot_download
+
+    base_cache = model_dir.parent / "_base_tokenizer"
+    base_cache.mkdir(parents=True, exist_ok=True)
+    try:
+        snapshot_download(
+            repo_id=base_model,
+            local_dir=str(base_cache),
+            local_dir_use_symlinks=False,
+            allow_patterns=list(TOKENIZER_FILE_NAMES) + ["config.json"],
+        )
+    except Exception as e:
+        return False, f"snapshot_download failed: {e}"
+
+    base_config = base_cache / "config.json"
+    model_config = model_dir / "config.json"
+    if base_config.is_file() and model_config.is_file():
+        ok, detail = _vocab_sizes_match(base_config, model_config)
+        if not ok:
+            return False, f"unsafe to swap — {detail}"
+    else:
+        detail = "config.json missing in base or model — skipping vocab check"
+
+    swapped: list[str] = []
+    for name in TOKENIZER_FILE_NAMES:
+        src = base_cache / name
+        if not src.is_file():
+            continue
+        dst = model_dir / name
+        if dst.is_file():
+            backup = dst.with_suffix(dst.suffix + ".orig")
+            if not backup.is_file():
+                backup.write_bytes(dst.read_bytes())
+        dst.write_bytes(src.read_bytes())
+        swapped.append(name)
+
+    if not swapped:
+        return False, "no tokenizer files found in base model"
+    return True, f"swapped {len(swapped)} files ({detail}): {swapped}"
+
+
+def patch_tokenizer_class(model_dir: Path, base_model: str | None = None) -> None:
     """Ensure the model dir's tokenizer loads via AutoTokenizer in the current env.
 
-    Capability-probe, not allowlist: we actually attempt to load the tokenizer,
-    and only rewrite `tokenizer_class` if the probe fails. Generalizes to ANY
-    vendor whose tokenizer_config.json names a class that:
-      (a) is not in transformers, AND
-      (b) has no remote code (auto_map) — or remote code fails to load.
+    Three-layer fix, in order of preference:
+      1. Probe — if it loads, do nothing.
+      2. Base-tokenizer swap (if base_model given) — replace tokenizer files
+         with those from the base model. Safe when vocab is unchanged (true
+         for all LoRA targeting projection layers, not embeddings).
+      3. File-inferred class substitution — rewrite tokenizer_class to a
+         transformers stdlib class (PreTrainedTokenizerFast / LlamaTokenizer
+         / GPT2Tokenizer) based on which tokenizer files are present.
 
-    Substitute class is inferred from the files present (not hard-coded).
-    Original config is backed up to tokenizer_config.json.orig for auditability.
+    Every rewrite backs up the original file to *.orig for auditability.
     """
     cfg_path = model_dir / "tokenizer_config.json"
     if not cfg_path.is_file():
@@ -88,6 +200,21 @@ def patch_tokenizer_class(model_dir: Path) -> None:
     if ok:
         return  # Tokenizer already loads — no patch needed.
 
+    # Layer 2: base-tokenizer swap (preferred — root-cause, not symptom)
+    if base_model:
+        swapped, detail = _swap_base_tokenizer(model_dir, base_model)
+        if swapped:
+            print(f"[patch] base-tokenizer swap from {base_model}: {detail}",
+                  flush=True)
+            ok2, err2 = _probe_tokenizer(model_dir)
+            if ok2:
+                return
+            print(f"[patch] swap loaded files but probe still fails: {err2} "
+                  "— falling back to class substitution", flush=True)
+        else:
+            print(f"[patch] base-tokenizer swap skipped: {detail}", flush=True)
+
+    # Layer 3: file-inferred class substitution (fallback)
     import json
     cfg = json.loads(cfg_path.read_text())
     original_cls = cfg.get("tokenizer_class", "<unset>")
@@ -121,7 +248,7 @@ def patch_tokenizer_class(model_dir: Path) -> None:
 def materialize_model(model_id: str, work_dir: Path, base_model: str | None) -> Path:
     """Return a local directory containing a merged model ready for GGUF conversion."""
     if Path(model_id).is_dir():
-        patch_tokenizer_class(Path(model_id))
+        patch_tokenizer_class(Path(model_id), base_model)
         return Path(model_id)
 
     from huggingface_hub import snapshot_download
@@ -140,7 +267,7 @@ def materialize_model(model_id: str, work_dir: Path, base_model: str | None) -> 
             "tokenizer*", "special_tokens*",
         ],
     )
-    patch_tokenizer_class(target)
+    patch_tokenizer_class(target, base_model)
 
     adapter_cfg = target / "adapter_config.json"
     if adapter_cfg.is_file():

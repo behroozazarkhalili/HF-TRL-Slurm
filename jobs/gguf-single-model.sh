@@ -16,7 +16,7 @@
 # =============================================================================
 #SBATCH --job-name=gguf-single
 #SBATCH --account=def-maxwl_cpu
-#SBATCH --time=0-12:00:00
+#SBATCH --time=0-02:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -31,7 +31,7 @@ set -euo pipefail
 
 PROJECT_DIR="/project/6014832/ermia/HF-TRL"
 SCRIPT_DIR="$PROJECT_DIR/.claude/skills/slurm-model-trainer/scripts"
-VENV="/scratch/ermia/venvs/hf_env"
+VENV="/scratch/ermia/venvs/hf_unsloth"
 LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-/scratch/ermia/tools/llama.cpp}"
 QUANTS="${QUANTS:-Q2_K,Q3_K_M,Q4_K_M,Q5_K_M,Q6_K,Q8_0}"
 

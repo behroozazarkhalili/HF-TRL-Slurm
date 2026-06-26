@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=smoke-qwen35-9b-sft
+#SBATCH --job-name=smoke-fastcontext-4b-sft-xlam
 #SBATCH --account=def-maxwl_gpu
-#SBATCH --time=0-01:30:00
+#SBATCH --time=0-01:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=40G
+#SBATCH --cpus-per-task=6
+#SBATCH --mem=32G
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3_3g.40gb:1
 #SBATCH --partition=gpubase_bygpu_b1
 #SBATCH --exclude=fc10713
@@ -16,13 +16,13 @@ set -euo pipefail
 
 PROJECT_DIR="/project/6014832/ermia/HF-TRL"
 NB_DIR="$PROJECT_DIR/notebooks"
-OUTPUT_DIR="/scratch/$USER/outputs/unsloth-smoke-qwen35-$(date +%Y%m%d)"
+OUTPUT_DIR="/scratch/$USER/outputs/unsloth-smoke-fastcontext-$(date +%Y%m%d)"
 VENV="/scratch/ermia/venvs/hf_unsloth"
 
 mkdir -p "$OUTPUT_DIR"
 
 echo "=========================================="
-echo "SMOKE: Qwen3.5-9B SFT distillation (Jackrong recipe validation)"
+echo "SMOKE: FastContext-4B-SFT_base xLAM function calling (compat validation)"
 echo "=========================================="
 echo "Node:  $SLURMD_NODENAME"
 echo "Job:   $SLURM_JOB_ID"
@@ -44,10 +44,11 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     done < "$PROJECT_DIR/.env"
 fi
 
-export NB_INPUT="$NB_DIR/sft_distillation_qwen3.5-9b_unsloth.ipynb"
-export NB_SMOKE="$OUTPUT_DIR/sft_qwen35_9b_smoke_input.ipynb"
-export NB_OUTPUT="$OUTPUT_DIR/sft_qwen35_9b_smoke_output.ipynb"
+export NB_INPUT="$NB_DIR/xlam_function_calling_fastcontext-4b-sft_unsloth.ipynb"
+export NB_SMOKE="$OUTPUT_DIR/xlam_fastcontext_4b_sft_smoke_input.ipynb"
+export NB_OUTPUT="$OUTPUT_DIR/xlam_fastcontext_4b_sft_smoke_output.ipynb"
 
+# Flip SMOKE_TEST → True (handle both str and list[str] source, per memory)
 python3 - <<'PY'
 import json, os
 src = os.environ["NB_INPUT"]
