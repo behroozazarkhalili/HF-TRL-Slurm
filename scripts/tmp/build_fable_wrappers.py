@@ -32,20 +32,22 @@ CPUS = {"3b": 8, "4b": 8, "8b": 8, "9b": 8}
 # Pilot (45929015, vibethinker-3b on D): stable 36 steps/min → 2 epochs over 377K
 # ≈ 43h, fits b4/48h with ~5h margin. But 4B+ models are slower/step → projected to
 # exceed 48h. So: 3B stays on b4/48h; 4B/8B/9B move to b5/72h (7-day MIG tier).
-# resume_from_checkpoint covers any overrun regardless.
+# B-leg: the original 2-3h(b2) walltime TIMED OUT (4,151 steps × 3 epochs over 4,350 rows
+# did not finish). Bumped to 1-day(b3) across all sizes for headroom. resume_from_checkpoint
+# covers any overrun regardless.
 TRAIN_H = {
-    ("3b", "b"): 2, ("4b", "b"): 2, ("8b", "b"): 3, ("9b", "b"): 3,
+    ("3b", "b"): 24, ("4b", "b"): 24, ("8b", "b"): 24, ("9b", "b"): 24,
     ("3b", "d"): 48, ("4b", "d"): 72, ("8b", "d"): 72, ("9b", "d"): 72,
 }
 SMOKE_H = 2  # generous; smoke is 100 rows / 5 steps
 
 
 def train_partition(size_tag: str, ds_key: str) -> str:
-    # B fits the 12h b2 tier. On D: 3B fits b4 (3-day); 4B+ need b5 (7-day) headroom.
-    # Same nvidia_h100_80gb_hbm3_3g.40gb MIG slice throughout — only the walltime tier
-    # differs.
+    # B-leg: 1-day b3 tier (was b2/3h, which timed out). On D: 3B fits b4 (3-day); 4B+ need
+    # b5 (7-day) headroom. Same nvidia_h100_80gb_hbm3_3g.40gb MIG slice throughout — only the
+    # walltime tier differs.
     if ds_key == "b":
-        return "gpubase_bygpu_b2"
+        return "gpubase_bygpu_b3"
     return "gpubase_bygpu_b4" if size_tag == "3b" else "gpubase_bygpu_b5"
 
 

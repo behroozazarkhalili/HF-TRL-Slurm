@@ -28,7 +28,7 @@ them ahead of time. Deriving the instruction/response parts from the live tokeni
 train time is correct for every family and removes a whole class of mask-mismatch bugs.
 """
 from __future__ import annotations
-import json, copy, re
+import ast, json, copy, re
 from pathlib import Path
 
 ROOT = Path("/project/6014832/ermia/HF-TRL")
@@ -54,6 +54,72 @@ def find_cell(nb, *needles, kind="code"):
         if all(n in s for n in needles):
             return i
     return None
+
+
+def _strip_magics(src: str) -> str:
+    """Blank Jupyter line/cell magics + shell escapes so the body is valid Python AST."""
+    return "\n".join("" if l.lstrip().startswith(("%", "!")) else l for l in src.splitlines())
+
+
+def nb_binds_name(nb, name: str) -> bool:
+    """True if any code cell STRUCTURALLY binds `name` (assignment target / ann-assign /
+    for-target / with-as) — via AST, so matches in comments or string literals do NOT count.
+    Falls back to a word-boundary `=` regex only if a cell fails to parse."""
+    for c in nb["cells"]:
+        if c["cell_type"] != "code":
+            continue
+        src = _strip_magics(cell_source(c))
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            if re.search(rf"^\s*{re.escape(name)}\s*=", src, re.M):
+                return True
+            continue
+        for node in ast.walk(tree):
+            targets = []
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            elif isinstance(node, ast.For):
+                targets = [node.target]
+            elif isinstance(node, ast.With):
+                targets = [it.optional_vars for it in node.items if it.optional_vars]
+            for t in targets:
+                for sub in ast.walk(t):
+                    if isinstance(sub, ast.Name) and sub.id == name:
+                        return True
+    return False
+
+
+def trainer_output_dir_value(cell_src: str, train_var: str):
+    """Return the trainer's output_dir as ('literal', value) or ('name', identifier) or None,
+    found via AST on the *executed* config call (TrainingArguments/SFTConfig/<args>=...).
+    Comments and unrelated strings are ignored. Picks the output_dir keyword on the call
+    whose result feeds the trainer's args — falling back to the first config call found."""
+    try:
+        tree = ast.parse(_strip_magics(cell_src))
+    except SyntaxError:
+        return None
+    found = None
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        cname = (callee.id if isinstance(callee, ast.Name)
+                 else callee.attr if isinstance(callee, ast.Attribute) else "")
+        if cname not in ("TrainingArguments", "SFTConfig", "GRPOConfig", "DPOConfig"):
+            continue
+        for kw in node.keywords:
+            if kw.arg == "output_dir":
+                v = kw.value
+                if isinstance(v, ast.Constant) and isinstance(v.value, str):
+                    return ("literal", v.value)
+                if isinstance(v, ast.Name):
+                    return ("name", v.id)
+                # any other expression (f-string, call) -> can't resolve to a literal
+                return ("expr", None)
+    return found
 
 
 # ---- the fable dataset cell (shared across all families) --------------------
@@ -345,12 +411,95 @@ def build_one(m: dict, ds_key: str) -> tuple[str, dict]:
     # output_dir if one exists (auto-detected). A long D-run that hits walltime or
     # a node failure then continues instead of restarting from scratch. No-op on a
     # fresh run (no checkpoint → trains from step 0).
+    #
+    # CHECKPOINT_ROOT must equal the trainer's output_dir (where checkpoints land).
+    # Derive it from the actual output_dir= literal in this cell; default to "outputs"
+    # (TRL's default) if none found. Inject the assignment IMMEDIATELY before .train()
+    # so the name is always defined (fixes a prior NameError where CHECKPOINT_ROOT was
+    # referenced but never assigned).
     joined = "\n".join(tlines)
+    # Resolve the checkpoint dir WITHOUT shadowing a pre-existing definition.
+    #   - Some templates already define CHECKPOINT_ROOT in an earlier cell (env-driven,
+    #     e.g. os.environ.get("CHECKPOINT_ROOT", "/scratch/.../checkpoints/...")) AND set
+    #     output_dir=CHECKPOINT_ROOT. For those, the name is already correct — injecting a
+    #     literal `CHECKPOINT_ROOT = 'outputs'` here would SHADOW it and point resume at the
+    #     wrong dir. So we must NOT re-assign it.
+    #   - Other templates use a bare output_dir="outputs" and never define CHECKPOINT_ROOT.
+    #     For those we inject the assignment, derived from the actual output_dir literal.
+    # AST-based detection (robust to comments / strings / multiple output_dir):
+    #   - _already_defines_ckpt: does ANY code cell structurally BIND `CHECKPOINT_ROOT`?
+    #     (assignment target, not a textual match) → if so, never re-assign (no shadow).
+    #   - output_dir value resolved from the EXECUTED config call via AST. If it is the
+    #     name CHECKPOINT_ROOT (the env-group), the prior binding governs and we inject no
+    #     assignment. If it is a string literal (the bare-output_dir group), use that exact
+    #     value. Fallback "outputs" only when no config/output_dir is resolvable.
+    _already_defines_ckpt = nb_binds_name(nb, "CHECKPOINT_ROOT")
+    _od = trainer_output_dir_value(joined, var)
+    if _od and _od[0] == "literal":
+        # CRITICAL: a RELATIVE literal output_dir (e.g. "outputs") is SHARED across all
+        # notebooks because papermill runs them with --cwd notebooks/. resume_from_checkpoint
+        # would then load a DIFFERENT model's checkpoint from notebooks/outputs/ → adapter
+        # shape mismatch. Rewrite any relative literal to a UNIQUE absolute per-(model,dataset)
+        # checkpoint dir (mirrors the _FABLE_OUT save convention), and point CHECKPOINT_ROOT
+        # at the SAME path. Absolute literals are left as-is (already unique by construction).
+        _lit = _od[1]
+        if not _lit.startswith("/"):
+            _uniq = (
+                '_os.path.join('
+                '_os.environ.get("SCRATCH", "/scratch/" + _os.environ.get("USER", "ermia")), '
+                f'"fable-checkpoints", "{m["dir"]}_{ds_key}")'
+            )
+            # Replace the bare literal in the config call, and prepend `import os as _os`
+            # + the unique-dir assignment is unnecessary — we inline the expression as the
+            # output_dir value AND as CHECKPOINT_ROOT so both stay identical.
+            joined = re.sub(
+                rf'(output_dir\s*=\s*)["\']{re.escape(_lit)}["\']',
+                rf'\1{_uniq}', joined, count=1,
+            )
+            _ckpt_root_expr = _uniq          # an expression, assigned to CHECKPOINT_ROOT below
+            _ckpt_root = None                # signals "use expression, not literal"
+        else:
+            _ckpt_root = _lit
+            _ckpt_root_expr = None
+    elif _od and _od[0] == "name" and _od[1] == "CHECKPOINT_ROOT":
+        # output_dir=CHECKPOINT_ROOT → resume must use that same name; require prior binding.
+        _ckpt_root = "outputs"  # unused when _already_defines_ckpt is True
+        _ckpt_root_expr = None
+    else:
+        _ckpt_root = "outputs"
+        _ckpt_root_expr = None
+    # Safety invariant: resume references CHECKPOINT_ROOT, so the name MUST be defined —
+    # either by a prior binding, or by the assignment we are about to inject. If neither
+    # holds (output_dir is a non-CHECKPOINT_ROOT name/expr with no prior binding), fail
+    # LOUD instead of emitting a NameError-bound notebook.
+    if not _already_defines_ckpt and _od and _od[0] in ("name", "expr") and not (
+        _od[0] == "name" and _od[1] == "CHECKPOINT_ROOT"
+    ):
+        raise SystemExit(
+            f"{m['name']}: cannot resolve CHECKPOINT_ROOT — output_dir is "
+            f"{_od!r} with no prior CHECKPOINT_ROOT binding; refusing to emit a broken notebook."
+        )
+    # Match the WHOLE line containing `<var>.train()` (incl. any `x = ` prefix and
+    # leading indentation). Prepend a CHECKPOINT_ROOT assignment as its OWN line
+    # (same indent) ONLY when no prior definition exists — never spliced mid-expression.
+    def _inject(mm):
+        indent, prefix = mm.group("indent"), mm.group("prefix")
+        if _already_defines_ckpt:
+            assign = ""                                   # env-group: prior binding governs
+        elif _ckpt_root_expr is not None:
+            # unique-path case: CHECKPOINT_ROOT = <same expression used for output_dir>
+            assign = f"{indent}CHECKPOINT_ROOT = {_ckpt_root_expr}\n"
+        else:
+            assign = f"{indent}CHECKPOINT_ROOT = {_ckpt_root!r}\n"  # absolute literal
+        return (
+            f"{assign}{indent}{prefix}{var}.train("
+            "resume_from_checkpoint=(_os.path.isdir(CHECKPOINT_ROOT) and any("
+            "d.startswith('checkpoint-') for d in _os.listdir(CHECKPOINT_ROOT))))"
+        )
+
     joined = re.sub(
-        rf"(\b{re.escape(var)}\.train\()\s*\)",
-        r"\1resume_from_checkpoint=(_os.path.isdir(CHECKPOINT_ROOT) and any("
-        r"d.startswith('checkpoint-') for d in _os.listdir(CHECKPOINT_ROOT))))",
-        joined, count=1,
+        rf"^(?P<indent>[ \t]*)(?P<prefix>.*?)\b{re.escape(var)}\.train\(\s*\)",
+        _inject, joined, count=1, flags=re.MULTILINE,
     )
     if "resume_from_checkpoint" in joined and "import os as _os" not in joined.split("resume_from_checkpoint")[0][-400:]:
         joined = "import os as _os\n" + joined
